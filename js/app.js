@@ -36,7 +36,9 @@ function streak(){
 function render(){
   const k=state.sel, d=day(k), date=fromKey(k), todayK=keyOf(new Date());
   const lbl=date.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
-  $("dayLabel").textContent=(k===todayK?"Aujourd'hui · ":"")+lbl;
+  const ago=Math.round((fromKey(todayK)-date)/864e5);
+  $("dayRel").textContent=ago===0?"Aujourd'hui":ago===1?"Hier":"Il y a "+ago+" jours";
+  $("dayLabel").textContent=lbl;
   $("nextDay").disabled=k>=todayK;
 
   const t=target(), tot=total(d);

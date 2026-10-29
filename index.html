@@ -43,9 +43,11 @@
 
 <!-- ===== Application ===== -->
 <div class="wrap" id="app" hidden>
+  <!-- barre fixe en haut : date + navigation + onglets -->
+  <div class="appbar">
   <header class="top">
-    <div>
-      <div class="lbl">Carnet Forme</div>
+    <div class="daybox">
+      <div class="lbl" id="dayRel">Aujourd'hui</div>
       <div class="daylabel" id="dayLabel">—</div>
     </div>
     <div class="daynav">
@@ -59,6 +61,7 @@
     <button role="tab" id="tabExo" aria-controls="viewExo" aria-selected="false">Exercices</button>
     <button role="tab" id="tabNutri" aria-controls="viewNutri" aria-selected="false">Nutrition</button>
   </nav>
+  </div>
   <div class="view" id="viewNutri" role="tabpanel" aria-labelledby="tabNutri">
   <section class="card" aria-labelledby="hP">
     <h2 id="hP">Repas du jour</h2>

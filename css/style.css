@@ -125,7 +125,18 @@ textarea{width:100%;min-height:76px;border-radius:10px;border:1px solid var(--li
 .primary:disabled{opacity:.55;cursor:default}
 .est-tag{font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:0 4px;margin-left:6px}
 .view{display:flex;flex-direction:column;gap:18px}
-.maintabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface)}
+.maintabs{background:var(--surface)}
+/* barre fixe : la date, la navigation par jour et les onglets restent visibles en faisant défiler ;
+   elle passe sous l'encoche (padding) et couvre les marges latérales pour masquer le contenu qui défile dessous */
+.appbar{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;flex-direction:column;gap:10px;
+  margin:calc(-8px - env(safe-area-inset-top,0px)) -16px 0;padding:calc(8px + env(safe-area-inset-top,0px)) 16px 8px}
+.appbar .top{flex-wrap:nowrap;align-items:center}
+.daybox{min-width:0}
+.daybox .daylabel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.appbar .daynav{flex:none;gap:4px}
+.appbar .todaybtn{padding:0 10px}
+@media (max-width:389px){.appbar .daylabel{font-size:18px}}
+@media (max-width:369px){.appbar .daylabel{font-size:17px}}
 .maintabs button{height:40px;font-size:15px}
 .maintabs button[aria-selected="true"]{background:var(--accent);color:var(--surface);box-shadow:none}
 .meters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
