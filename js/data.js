@@ -1,10 +1,10 @@
 // ---------- données fixes de l'app : sports, catalogue d'exercices, modèles de séance ----------
 
 export const SPORTS=[
-  {id:"muscu",name:"Musculation"},
+  {id:"muscu",name:"Musculation",short:"Muscu"},
   {id:"natation",name:"Natation"},
-  {id:"cyclisme",name:"Cyclisme"},
-  {id:"boxe",name:"Punch boxing"},
+  {id:"cyclisme",name:"Cyclisme",short:"Vélo"},
+  {id:"boxe",name:"Punch boxing",short:"Boxe"},
   {id:"autre",name:"Autre"}
 ];
 export const QUICK=[{name:"Shaker whey",g:25,kcal:113}];

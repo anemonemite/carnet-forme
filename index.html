@@ -57,7 +57,8 @@
     </div>
   </header>
   <nav class="tabs maintabs" role="tablist" aria-label="Sections">
-    <button role="tab" id="tabSport" aria-controls="viewSport" aria-selected="true">Séances</button>
+    <button role="tab" id="tabHome" aria-controls="viewHome" aria-selected="true">Accueil</button>
+    <button role="tab" id="tabSport" aria-controls="viewSport" aria-selected="false">Séances</button>
     <button role="tab" id="tabExo" aria-controls="viewExo" aria-selected="false">Exercices</button>
     <button role="tab" id="tabNutri" aria-controls="viewNutri" aria-selected="false">Nutrition</button>
   </nav>
@@ -107,6 +108,7 @@
       <label for="sFactor">Protéines (g/kg)<input id="sFactor" type="number" inputmode="decimal" min="0.8" max="3" step="0.1" value="1.8"></label>
       <label for="sDose">Dose créatine (g)<input id="sDose" type="number" inputmode="decimal" min="1" max="20" step="0.5" value="5"></label>
       <label for="sKcal">Objectif kcal (facultatif)<input id="sKcal" type="number" inputmode="numeric" min="800" max="6000" step="50" placeholder="ex. 2600"></label>
+      <label for="sWeekGoal">Séances par semaine (objectif)<input id="sWeekGoal" type="number" inputmode="numeric" min="1" max="14" step="1" value="3"></label>
     </div>
     <p class="hint">Repère courant pour un pratiquant régulier : 1,6 à 2,2 g de protéines par kg de poids de corps.</p>
 
@@ -155,17 +157,44 @@
     </div>
   </details>
   </div>
-  <div class="view" id="viewSport" role="tabpanel" aria-labelledby="tabSport" hidden>
+  <!-- ===== Accueil : la journée en un coup d'œil et quelques stats ===== -->
+  <div class="view" id="viewHome" role="tabpanel" aria-labelledby="tabHome" hidden>
   <section class="card welcome" id="welcome" aria-labelledby="hWel" hidden>
     <h2 id="hWel">Bienvenue !</h2>
     <p>Note ici tes séances, tes repas et ta créatine, jour après jour. Pour commencer, renseigne ton poids : il sert à calculer ton objectif de protéines et le tonnage des tractions.</p>
     <div class="btnrow"><button type="button" class="primary" id="welcomeGo">Renseigner mon poids</button><button type="button" class="ghost" id="welcomeLater">Plus tard</button></div>
   </section>
-  <section class="card" aria-labelledby="hS">
-    <h2 id="hS">Séance du jour</h2>
-    <div class="chips" id="chips"></div>
+  <section class="card" aria-labelledby="hToday">
+    <h2 id="hToday">Aujourd'hui</h2>
+    <div class="tiles">
+      <button type="button" class="tile" id="tileSport"></button>
+      <button type="button" class="tile" id="tileProt"></button>
+      <button type="button" class="tile" id="tileCrea" aria-pressed="false"></button>
+    </div>
   </section>
+  <section class="card" aria-labelledby="hWeek">
+    <div class="row"><h2 id="hWeek">Cette semaine</h2><span class="lbl" id="weekCount"></span></div>
+    <div class="week" id="weekStrip"></div>
+    <p class="status" id="weekGoalTxt" style="margin:0"></p>
+  </section>
+  <section class="card" aria-labelledby="hTon">
+    <h2 id="hTon">Tonnage</h2>
+    <div class="ton-head" id="tonHead"></div>
+    <div id="tonChart"></div>
+    <p class="status" id="tonInfo" style="margin:0"></p>
+  </section>
+  <section class="card" aria-labelledby="hPr">
+    <h2 id="hPr">Records récents</h2>
+    <ul class="prs" id="prList"></ul>
+  </section>
+  <section class="card" aria-labelledby="hNext">
+    <h2 id="hNext">Prochaine séance conseillée</h2>
+    <div class="next" id="nextBox"></div>
+    <button type="button" class="primary" id="nextGo">Voir la séance</button>
+  </section>
+  </div>
 
+  <div class="view" id="viewSport" role="tabpanel" aria-labelledby="tabSport" hidden>
   <section class="card" id="woCard" aria-labelledby="hW" hidden>
     <button type="button" class="card-toggle" id="woToggle" aria-expanded="true" aria-controls="woBody"><span class="chev" aria-hidden="true">›</span><h2 id="hW">Musculation</h2><span class="lbl" id="woCount"></span></button>
     <div id="woBody" class="wo-body">
@@ -196,6 +225,11 @@
     <div class="grid" id="cal"></div>
     <div class="legend" id="legend"></div>
     <div class="bysport" id="bysport"></div>
+  </section>
+
+  <section class="card" aria-labelledby="hS">
+    <h2 id="hS">Séance du jour</h2>
+    <div class="chips" id="chips"></div>
   </section>
   </div>
 

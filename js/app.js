@@ -11,7 +11,7 @@ const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const fmt1=n=>(Math.round(n*10)/10).toLocaleString("fr-FR");
 const $=id=>document.getElementById(id);
 
-const state={days:{},settings:{weight:null,factor:1.8,dose:5},sel:keyOf(new Date()),month:null};
+const state={days:{},settings:{weight:null,factor:1.8,dose:5,weekGoal:3},sel:keyOf(new Date()),month:null};
 state.month=(()=>{const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1)})();
 
 // ---------- stockage : tout passe par js/storage.js ----------
@@ -101,6 +101,7 @@ function render(){
   renderCatalog();
   renderPlan();
   renderCal();
+  renderHome();
 }
 
 function renderCal(){
@@ -138,6 +139,7 @@ function renderSettings(){
   $("sFactor").value=state.settings.factor;
   $("sDose").value=state.settings.dose;
   $("sKcal").value=state.settings.kcalTarget??"";
+  $("sWeekGoal").value=state.settings.weekGoal||3;
 }
 
 // ---------- saisie des repas ----------
@@ -168,7 +170,7 @@ $("prevMonth").onclick=()=>{state.month=new Date(state.month.getFullYear(),state
 $("nextMonth").onclick=()=>{state.month=new Date(state.month.getFullYear(),state.month.getMonth()+1,1);renderCal()};
 $("openSettings").onclick=()=>{$("settingsBox").open=true;$("sWeight").focus()};
 function syncMonth(){const d=fromKey(state.sel);state.month=new Date(d.getFullYear(),d.getMonth(),1)}
-[["sWeight","weight"],["sFactor","factor"],["sDose","dose"],["sKcal","kcalTarget"]].forEach(([id,f])=>$(id).addEventListener("input",()=>{
+[["sWeight","weight"],["sFactor","factor"],["sDose","dose"],["sKcal","kcalTarget"],["sWeekGoal","weekGoal"]].forEach(([id,f])=>$(id).addEventListener("input",()=>{
   const v=parseFloat(String($(id).value).replace(",","."));state.settings[f]=v>0?v:((f==="weight"||f==="kcalTarget")?null:state.settings[f]);render();saveSettings()}));
 
 // ---------- suppression avec annulation ----------
@@ -588,13 +590,139 @@ function rerollPick(i,dry){
 }
 $("planBtn").onclick=()=>{planShift=0;plan=buildPlan(state.sel,0);renderPlan()};
 
+// ---------- accueil : la journée en un coup d'œil, la semaine, le tonnage, les records ----------
+const sportName=id=>(SPORTS.find(s=>s.id===id)||{name:id}).name;
+const sportShort=id=>{const s=SPORTS.find(x=>x.id===id);return s?s.short||s.name:id};
+const mondayOf=d=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-(x.getDay()+6)%7);return x};
+const weekKeys=mon=>[0,1,2,3,4,5,6].map(i=>keyOf(addDays(mon,i)));
+const trainedOn=k=>(day(k).sports||[]).length>0;
+const dayVol=k=>(day(k).workout||[]).reduce((s,e)=>s+vol(e.ex,e.sets),0);
+const weekGoal=()=>Math.max(1,Math.round(+state.settings.weekGoal||3));
+const plural=(n,s,p)=>n+" "+(n>1?p:s);
+// pour donner une idée du tonnage : le plus gros objet dont on a soulevé au moins l'équivalent
+const EQUIV=[[150000,"baleine bleue","baleines bleues","🐋"],[6000,"éléphant","éléphants","🐘"],[1200,"voiture","voitures","🚗"],[400,"piano à queue","pianos à queue","🎹"],[70,"personne de 70 kg","personnes de 70 kg","🧍"]];
+function equiv(kg){
+  for(const [w,s,p,ic] of EQUIV){const n=kg/w;if(n>=1){const r=n>=10?Math.round(n):Math.round(n*2)/2;return ic+" Soit le poids de "+fmt1(r)+" "+(r>=2?p:s)+"."}}
+  return "";
+}
+function fillTile(el,lbl,big,sub,extra){
+  el.innerHTML='<span class="lbl"></span><b></b><small></small>';
+  el.children[0].textContent=lbl;el.children[1].textContent=big;el.children[2].textContent=sub;
+  if(extra)el.insertBefore(extra,el.children[2]);
+}
+// records : séances où la charge max d'un exercice dépasse tout ce qui avait été fait avant (30 derniers jours)
+function recentPRs(){
+  const since=keyOf(addDays(new Date(),-30)), top={}, out=[];
+  Object.keys(state.days).sort().forEach(dk=>(state.days[dk].workout||[]).forEach(e=>{
+    if(!(e.sets||[]).length)return;
+    const n=norm(e.ex), b=best(e.sets);
+    if(top[n]!==undefined&&b>top[n]&&dk>=since)out.push({ex:e.ex,k:dk,kg:b,gain:b-top[n]});
+    if(top[n]===undefined||b>top[n])top[n]=b;
+  }));
+  const seen=new Set(); // le plus récent record par exercice
+  return out.reverse().filter(r=>!seen.has(norm(r.ex))&&seen.add(norm(r.ex))).slice(0,4);
+}
+let tonPick=null; // semaine touchée dans le graphique (détail affiché dessous)
+function renderHome(){
+  const k=state.sel, d=day(k), todayK=keyOf(new Date());
+  $("hToday").textContent=k===todayK?"Aujourd'hui":fromKey(k).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+
+  // tuiles du jour
+  const sp=d.sports||[], nSets=(d.workout||[]).reduce((s,e)=>s+(e.sets||[]).length,0);
+  let dots=null;
+  if(sp.length){dots=document.createElement("span");dots.className="dots";sp.forEach(s=>{const i=document.createElement("i");i.style.setProperty("--c","var(--"+s+")");dots.appendChild(i)})}
+  fillTile($("tileSport"),"Séance",sp.length?sp.map(sportShort).join(" + "):d.rest?"Repos":"—",
+    nSets?plural(nSets,"série","séries")+" · "+fmtKg(dayVol(k)):sp.length?"Bien joué !":d.rest?"Récupération":"Pas encore de séance",dots);
+  $("tileSport").setAttribute("aria-label","Séance : "+(sp.length?sp.map(sportName).join(", "):d.rest?"repos":"aucune")+". Ouvrir l'onglet Séances");
+  const t=target(), tot=total(d), bar=document.createElement("span");
+  bar.className="bar"+(t&&tot>=t?" done":"");bar.innerHTML="<i></i>";bar.firstChild.style.width=(t?Math.min(100,tot/t*100):0)+"%";
+  fillTile($("tileProt"),"Protéines",fmt1(tot)+" g",t?(tot>=t?"Objectif atteint":"sur "+t+" g"):"Objectif à définir",bar);
+  $("tileProt").setAttribute("aria-label","Protéines : "+fmt1(tot)+" g"+(t?" sur "+t:"")+". Ouvrir l'onglet Nutrition");
+  const st=streak();
+  fillTile($("tileCrea"),"Créatine",d.creatine?"✓ Prise":"À prendre",st?plural(st,"jour","jours")+" d'affilée":"Touche quand c'est pris");
+  $("tileCrea").classList.toggle("on",!!d.creatine);$("tileCrea").setAttribute("aria-pressed",!!d.creatine);
+  $("tileCrea").setAttribute("aria-label","Créatine "+(d.creatine?"prise":"pas encore prise")+", "+st+" jours d'affilée. Touche pour changer");
+
+  // la semaine (lundi → dimanche) du jour affiché
+  const mon=mondayOf(fromKey(k)), keys=weekKeys(mon), goal=weekGoal(), n=keys.filter(trainedOn).length;
+  const thisWeek=keyOf(mon)===keyOf(mondayOf(new Date()));
+  $("hWeek").textContent=thisWeek?"Cette semaine":"Semaine du "+fromKey(keyOf(mon)).toLocaleDateString("fr-FR",{day:"numeric",month:"short"});
+  $("weekCount").textContent=n+" / "+plural(goal,"séance","séances");
+  const strip=$("weekStrip");strip.innerHTML="";
+  keys.forEach((dk,i)=>{
+    const x=day(dk), s=x.sports||[], b=document.createElement("button");b.type="button";b.className="wday";
+    if(s.length){b.classList.add("done");b.style.setProperty("--c","var(--"+s[0]+")")}else if(x.rest)b.classList.add("rest");
+    if(dk===todayK)b.classList.add("today");if(dk===k)b.classList.add("sel");
+    b.innerHTML='<span>'+"LMMJVSD"[i]+'</span><span class="c">'+(s.length>1?s.length:s.length?"✓":"")+'</span>';
+    b.setAttribute("aria-label",fromKey(dk).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric"})+" : "+(s.length?s.map(sportName).join(", "):x.rest?"repos":"pas de séance"));
+    if(dk>todayK)b.disabled=true;else b.onclick=()=>{state.sel=dk;syncMonth();render()};
+    strip.appendChild(b);
+  });
+  // série de semaines à l'objectif, en comptant la semaine en cours seulement si elle est déjà réussie
+  let wk=mondayOf(new Date()), run=0;
+  if(weekKeys(wk).filter(trainedOn).length>=goal)run++;
+  for(wk=addDays(wk,-7);run<520&&weekKeys(wk).filter(trainedOn).length>=goal;wk=addDays(wk,-7))run++;
+  $("weekGoalTxt").textContent=(n>=goal?"Objectif de la semaine atteint 🎉":thisWeek?"Encore "+plural(goal-n,"séance","séances")+" pour atteindre ton objectif.":"Objectif non atteint cette semaine-là.")+
+    (run>=2?" 🔥 "+run+" semaines d'affilée à l'objectif.":"");
+
+  // tonnage des 8 dernières semaines (jusqu'à la semaine du jour affiché)
+  const weeks=[7,6,5,4,3,2,1,0].map(i=>{const m=addDays(mon,-7*i);return {m,v:weekKeys(m).reduce((s,x)=>s+dayVol(x),0)}});
+  const cur=weeks[7].v, prev=weeks[6].v, maxV=Math.max(...weeks.map(w=>w.v));
+  const head=$("tonHead");
+  if(!maxV){
+    head.innerHTML='<span class="empty">Note tes séries en musculation (kg × reps) pour voir ici ton tonnage semaine après semaine.</span>';
+    $("tonChart").innerHTML="";$("tonInfo").textContent="";
+  }else{
+    head.innerHTML='<b></b><span></span>';
+    head.firstChild.textContent=fmtKg(cur);
+    head.lastChild.textContent=(thisWeek?"cette semaine":"cette semaine-là")+(prev?" · "+fmtKg(prev)+" la semaine d'avant"+(cur>prev?" ↑":""):"");
+    const wrap=document.createElement("div");wrap.className="tw";
+    const bars=document.createElement("div");bars.className="tw-bars";
+    const labels=document.createElement("div");labels.className="tw-labels";labels.setAttribute("aria-hidden","true");
+    weeks.forEach((w,i)=>{
+      const wk0=keyOf(w.m), lbl="Semaine du "+w.m.toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" : "+fmtKg(w.v);
+      const c=document.createElement("button");c.type="button";c.className="tw-col"+(i===7?" cur":"")+(tonPick===wk0?" on":"");
+      c.setAttribute("aria-label",lbl);c.title=lbl;
+      const bar=document.createElement("i");bar.style.height=(w.v?Math.max(3,w.v/maxV*100):0)+"%";c.appendChild(bar);
+      c.onclick=()=>{tonPick=tonPick===wk0?null:wk0;renderHome()};
+      bars.appendChild(c);
+      const l=document.createElement("span");l.textContent=w.m.getDate()+"/"+(w.m.getMonth()+1);labels.appendChild(l);
+    });
+    wrap.append(bars,labels);$("tonChart").innerHTML="";$("tonChart").appendChild(wrap);
+    const pickW=weeks.find(w=>keyOf(w.m)===tonPick);
+    $("tonInfo").textContent=pickW?"Semaine du "+pickW.m.toLocaleDateString("fr-FR",{day:"numeric",month:"long"})+" : "+fmtKg(pickW.v)+".":equiv(cur);
+  }
+
+  // records récents
+  const prs=recentPRs(), ul=$("prList");ul.innerHTML="";
+  if(!prs.length){const li=document.createElement("li");li.className="empty";li.textContent=maxV||Object.keys(state.days).length?"Pas de nouveau record ces 30 derniers jours. Ça viendra !":"Tes records en musculation s'afficheront ici.";ul.appendChild(li)}
+  prs.forEach(r=>{
+    const li=document.createElement("li");li.innerHTML='<span class="pr-ex"></span><span class="pr-kg"></span><span class="pr-d"></span>';
+    li.children[0].textContent="🏆 "+r.ex;
+    li.children[1].textContent=(isBW(r.ex)?"PDC+"+fmt1(r.kg):fmt1(r.kg))+" kg (+"+fmt1(r.gain)+")";
+    li.children[2].textContent=shortDate(r.k);
+    ul.appendChild(li);
+  });
+
+  // aperçu de la séance proposée
+  const p=buildPlan(k,0), nb=$("nextBox");nb.innerHTML='<div class="plan-head"><b></b><span class="lbl"></span></div><p class="status"></p><p class="next-ex"></p>';
+  nb.querySelector("b").textContent=p.tpl.name;nb.querySelector(".lbl").textContent=plural(p.items.length,"exercice","exercices");
+  nb.querySelector(".status").textContent=p.first?"Aucune séance de muscu notée : un full body pour démarrer.":"Dernière séance le "+shortDate(p.lastK)+(p.lastGroups.length?" ("+p.lastGroups.join(", ").toLowerCase()+")":"")+".";
+  nb.querySelector(".next-ex").textContent=p.items.map(it=>it.ex).join(" · ");
+}
+$("tileSport").onclick=()=>{showView("seances");window.scrollTo({top:0})};
+$("tileProt").onclick=()=>{showView("nutrition");window.scrollTo({top:0})};
+$("tileCrea").onclick=()=>editDay(state.sel,x=>{x.creatine=!x.creatine});
+$("nextGo").onclick=()=>{showView("exercices");planShift=0;plan=buildPlan(state.sel,0);renderPlan();window.scrollTo({top:0})};
+
 // ---------- onglets principaux ----------
-const VIEWS={nutrition:["tabNutri","viewNutri"],seances:["tabSport","viewSport"],exercices:["tabExo","viewExo"]};
+const VIEWS={accueil:["tabHome","viewHome"],nutrition:["tabNutri","viewNutri"],seances:["tabSport","viewSport"],exercices:["tabExo","viewExo"]};
 function showView(v){
-  if(!VIEWS[v])v="seances";
+  if(!VIEWS[v])v="accueil";
   Object.entries(VIEWS).forEach(([name,[t,p]])=>{$(t).setAttribute("aria-selected",name===v);$(p).hidden=name!==v});
   try{localStorage.setItem("carnet-forme-tab",v)}catch(e){}
 }
+$("tabHome").onclick=()=>showView("accueil");
 $("tabNutri").onclick=()=>showView("nutrition");
 $("tabSport").onclick=()=>showView("seances");
 $("tabExo").onclick=()=>showView("exercices");
