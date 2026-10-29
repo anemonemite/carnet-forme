@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- fond plein (iOS et Android arrondissent eux-mêmes les coins) -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#74D6B4"/>
+      <stop offset="1" stop-color="#4CBE97"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g fill="#fff" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
+    <!-- tête -->
+    <circle cx="256" cy="148" r="34" stroke="none"/>
+    <!-- buste -->
+    <path d="M214 214 Q214 196 232 196 H280 Q298 196 298 214 L288 300 H224 Z" stroke="none"/>
+    <!-- jambes -->
+    <path d="M238 296 L214 396 M274 296 L298 396" fill="none" stroke-width="32"/>
+    <!-- bras -->
+    <path d="M222 214 L186 290 M290 214 L326 290" fill="none" stroke-width="26"/>
+  </g>
+  <!-- barre, détourée en vert pour la détacher du corps -->
+  <path d="M136 290 H376" stroke="#5CC9A3" stroke-width="30" stroke-linecap="round"/>
+  <g fill="#fff">
+    <rect x="132" y="282" width="248" height="16" rx="8"/>
+    <!-- disques -->
+    <rect x="112" y="238" width="24" height="104" rx="10"/>
+    <rect x="140" y="256" width="18" height="68" rx="8"/>
+    <rect x="376" y="238" width="24" height="104" rx="10"/>
+    <rect x="354" y="256" width="18" height="68" rx="8"/>
+  </g>
+  <!-- mains sur la barre -->
+  <circle cx="186" cy="290" r="16" fill="#fff"/>
+  <circle cx="326" cy="290" r="16" fill="#fff"/>
+</svg>

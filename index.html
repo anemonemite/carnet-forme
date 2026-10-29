@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Carnet Forme</title>
+<meta name="description" content="Carnet d'entraînement, repas et créatine">
+<meta name="theme-color" content="#F2F5F6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F171C" media="(prefers-color-scheme: dark)">
+<!-- écran d'accueil iPhone -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carnet forme">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ===== Connexion / inscription ===== -->
+<div class="auth" id="authView" hidden>
+  <div class="auth-brand">
+    <img src="icons/icon-192.png" alt="">
+    <div><div class="lbl">Carnet Forme</div><h1 id="authTitle">Connexion</h1></div>
+  </div>
+  <section class="card">
+    <form id="authForm" novalidate>
+      <label id="fEmail">Adresse e-mail<input id="aEmail" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false"></label>
+      <label id="fPass">Mot de passe<input id="aPass" type="password" autocomplete="current-password"></label>
+      <label id="fPass2">Confirme le mot de passe<input id="aPass2" type="password" autocomplete="new-password"></label>
+      <p class="msg" id="authMsg" role="status" hidden></p>
+      <button class="primary" type="submit" id="authSubmit">Se connecter</button>
+    </form>
+    <div class="auth-links" id="authLinks"></div>
+  </section>
+  <p class="msg">Chaque compte a ses propres données, invisibles pour les autres.</p>
+</div>
+
+<!-- ===== Application ===== -->
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <div>
+      <div class="lbl">Carnet Forme</div>
+      <div class="daylabel" id="dayLabel">—</div>
+    </div>
+    <div class="daynav">
+      <button class="iconbtn" id="prevDay" aria-label="Jour précédent">‹</button>
+      <button class="todaybtn" id="goToday">Aujourd'hui</button>
+      <button class="iconbtn" id="nextDay" aria-label="Jour suivant">›</button>
+    </div>
+  </header>
+  <nav class="tabs maintabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="tabSport" aria-controls="viewSport" aria-selected="true">Séances</button>
+    <button role="tab" id="tabExo" aria-controls="viewExo" aria-selected="false">Exercices</button>
+    <button role="tab" id="tabNutri" aria-controls="viewNutri" aria-selected="false">Nutrition</button>
+  </nav>
+  <div class="view" id="viewNutri" role="tabpanel" aria-labelledby="tabNutri">
+  <section class="card" aria-labelledby="hP">
+    <h2 id="hP">Repas du jour</h2>
+    <div class="meters">
+      <div class="meter">
+        <div class="row"><span class="lbl">Protéines</span><span class="lbl" id="targetLbl"></span></div>
+        <div class="pnum" id="pTotal">0<small> g</small></div>
+        <div class="bar" id="pBar"><i style="width:0%"></i></div>
+        <div class="status" id="pStatus"></div>
+      </div>
+      <div class="meter">
+        <div class="row"><span class="lbl">Calories</span><span class="lbl" id="kTargetLbl"></span></div>
+        <div class="pnum" id="kTotal">0<small> kcal</small></div>
+        <div class="bar" id="kBar"><i style="width:0%"></i></div>
+        <div class="status" id="kStatus"></div>
+      </div>
+    </div>
+    <div class="setup" id="setupNote" hidden>Renseigne ton poids pour calculer ton objectif de protéines. <button id="openSettings">Ouvrir les réglages</button></div>
+    <div class="quick" id="quick"></div>
+    <form class="custom" id="manualForm">
+      <input id="kLabel" type="text" placeholder="Aliment ou repas (facultatif)" aria-label="Aliment ou repas">
+      <input id="kVal" type="number" inputmode="numeric" min="0" step="1" placeholder="kcal" aria-label="Calories">
+      <input id="cGrams" type="number" inputmode="decimal" min="0" step="0.5" placeholder="g prot." aria-label="Grammes de protéines">
+      <button class="primary" type="submit">Ajouter</button>
+      <div class="status" id="manualStatus" hidden style="flex-basis:100%"></div>
+    </form>
+    <ul class="entries" id="entries"></ul>
+  </section>
+
+  <section class="card" aria-labelledby="hC">
+    <h2 id="hC">Créatine</h2>
+    <button class="crea" id="creaBtn" aria-pressed="false">
+      <span class="box">✓</span>
+      <span><strong id="creaTxt">Pas encore prise</strong><em id="creaDose">5 g de monohydrate</em></span>
+      <span class="streak" id="streak">0<small>jours d'affilée</small></span>
+    </button>
+  </section>
+
+  <details id="settingsBox">
+    <summary>Réglages</summary>
+    <div class="settings">
+      <label for="sWeight">Poids (kg)<input id="sWeight" type="number" inputmode="decimal" min="30" max="250" step="0.5" placeholder="ex. 78"></label>
+      <label for="sFactor">Protéines (g/kg)<input id="sFactor" type="number" inputmode="decimal" min="0.8" max="3" step="0.1" value="1.8"></label>
+      <label for="sDose">Dose créatine (g)<input id="sDose" type="number" inputmode="decimal" min="1" max="20" step="0.5" value="5"></label>
+      <label for="sKcal">Objectif kcal (facultatif)<input id="sKcal" type="number" inputmode="numeric" min="800" max="6000" step="50" placeholder="ex. 2600"></label>
+    </div>
+    <p class="hint">Repère courant pour un pratiquant régulier : 1,6 à 2,2 g de protéines par kg de poids de corps.</p>
+
+    <div class="sect">
+      <h3>Mes données</h3>
+      <p class="msg">Sauvegarde toutes tes séances, repas et réglages dans un fichier, ou récupère une sauvegarde (y compris celle de l'ancien artefact).</p>
+      <div class="btnrow">
+        <button type="button" class="ghost" id="exportBtn">Exporter mes données</button>
+        <button type="button" class="ghost" id="importBtn">Importer un fichier</button>
+      </div>
+      <button type="button" class="linkbtn" id="pasteBtn">… ou coller le texte d'une sauvegarde</button>
+      <input type="file" id="importFile" accept=".json,application/json,text/plain" hidden>
+      <div class="inline-form" id="pasteBox" hidden>
+        <textarea id="pasteText" placeholder="Colle ici le texte JSON exporté" aria-label="Texte de la sauvegarde"></textarea>
+        <button type="button" class="ghost" id="pasteRead">Lire ce texte</button>
+      </div>
+      <div class="confirm soft" id="importConfirm" hidden>
+        <p id="importTxt"></p>
+        <div class="btnrow"><button type="button" class="primary" id="importGo">Importer</button><button type="button" class="ghost" id="importCancel">Annuler</button></div>
+      </div>
+      <p class="msg" id="importMsg" role="status" hidden></p>
+    </div>
+
+    <div class="sect">
+      <h3>Compte</h3>
+      <p class="msg">Connecté avec <b id="accEmail"></b></p>
+      <div class="btnrow">
+        <button type="button" class="ghost" id="pwBtn">Changer de mot de passe</button>
+        <button type="button" class="ghost" id="logoutBtn">Se déconnecter</button>
+      </div>
+      <form class="inline-form" id="pwForm" hidden>
+        <input id="pwNew" type="password" autocomplete="new-password" placeholder="Nouveau mot de passe (8 caractères min.)" aria-label="Nouveau mot de passe">
+        <input id="pwNew2" type="password" autocomplete="new-password" placeholder="Confirme le nouveau mot de passe" aria-label="Confirme le nouveau mot de passe">
+        <button type="submit" class="primary">Enregistrer</button>
+      </form>
+      <div class="confirm" id="logoutConfirm" hidden>
+        <p id="logoutTxt"></p>
+        <div class="btnrow"><button type="button" class="danger solid" id="logoutGo">Me déconnecter quand même</button><button type="button" class="ghost" id="logoutCancel">Annuler</button></div>
+      </div>
+      <button type="button" class="danger" id="deleteBtn">Supprimer mon compte et mes données</button>
+      <div class="confirm" id="deleteConfirm" hidden>
+        <p><b>Action définitive.</b> Ton compte et toutes tes séances, repas et réglages seront effacés, sans retour possible. Pense à exporter tes données avant si tu veux les garder.</p>
+        <div class="btnrow"><button type="button" class="danger solid" id="deleteGo">Supprimer définitivement</button><button type="button" class="ghost" id="deleteCancel">Annuler</button></div>
+      </div>
+      <p class="msg" id="accMsg" role="status" hidden></p>
+    </div>
+  </details>
+  </div>
+  <div class="view" id="viewSport" role="tabpanel" aria-labelledby="tabSport" hidden>
+  <section class="card welcome" id="welcome" aria-labelledby="hWel" hidden>
+    <h2 id="hWel">Bienvenue !</h2>
+    <p>Note ici tes séances, tes repas et ta créatine, jour après jour. Pour commencer, renseigne ton poids : il sert à calculer ton objectif de protéines et le tonnage des tractions.</p>
+    <div class="btnrow"><button type="button" class="primary" id="welcomeGo">Renseigner mon poids</button><button type="button" class="ghost" id="welcomeLater">Plus tard</button></div>
+  </section>
+  <section class="card" aria-labelledby="hS">
+    <h2 id="hS">Séance du jour</h2>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <section class="card" id="woCard" aria-labelledby="hW" hidden>
+    <button type="button" class="card-toggle" id="woToggle" aria-expanded="true" aria-controls="woBody"><span class="chev" aria-hidden="true">›</span><h2 id="hW">Musculation</h2><span class="lbl" id="woCount"></span></button>
+    <div id="woBody" class="wo-body">
+    <div class="restcfg">
+      <span class="lbl">Repos</span>
+      <div class="restchips" id="restChips">
+        <button type="button" data-s="60">1:00</button><button type="button" data-s="90">1:30</button><button type="button" data-s="120">2:00</button><button type="button" data-s="180">3:00</button>
+      </div>
+      <button type="button" class="restgo" id="restGo" aria-label="Lancer le minuteur de repos">▶</button>
+    </div>
+    <div class="wo-total" id="woTotal" hidden></div>
+    <div class="wo" id="woList"></div>
+    <form class="custom" id="woForm">
+      <input id="woName" type="text" placeholder="Chercher ou créer un exercice" aria-label="Nom de l'exercice" autocomplete="off" autocapitalize="sentences">
+      <button class="primary" type="submit">Ajouter</button>
+    </form>
+    <div class="lbl" id="suggLbl">Exercices fréquents · touche pour ajouter</div>
+    <div class="chips" id="exSugg"></div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="hM">
+    <div class="calhead">
+      <button class="iconbtn" id="prevMonth" aria-label="Mois précédent">‹</button>
+      <div class="monthname" id="hM">—</div>
+      <button class="iconbtn" id="nextMonth" aria-label="Mois suivant">›</button>
+    </div>
+    <div class="grid" id="cal"></div>
+    <div class="legend" id="legend"></div>
+    <div class="bysport" id="bysport"></div>
+  </section>
+  </div>
+
+  <div class="view" id="viewExo" role="tabpanel" aria-labelledby="tabExo" hidden>
+  <section class="card" aria-labelledby="hPlan">
+    <h2 id="hPlan">Prochaine séance</h2>
+    <p class="status" id="planIntro" style="margin:0">Je regarde tes dernières séances et te propose un full body (ou une séance ciblée si tu préfères), avec les charges et reps à viser.</p>
+    <button class="primary" id="planBtn" type="button">Proposer une séance</button>
+    <div id="planBox" class="wo" hidden></div>
+  </section>
+  <section class="card" aria-labelledby="hX">
+    <div class="row"><h2 id="hX">Exercices</h2><span class="lbl" id="exCount"></span></div>
+    <input id="exSearch" class="search" type="search" placeholder="Chercher un exercice ou un muscle" aria-label="Chercher un exercice" autocomplete="off">
+    <div class="filt" role="group" aria-label="Groupe musculaire" id="fGroup"></div>
+    <div class="filt" role="group" aria-label="Matériel" id="fEquip"></div>
+    <div class="status" id="exTarget"></div>
+    <div class="catlist" id="catList"></div>
+  </section>
+  </div>
+
+  <div class="sync" id="sync">Chargement…</div>
+  <div class="timer" id="timer" role="timer" aria-live="off" hidden>
+    <div class="tleft"><span class="lbl" id="tLbl">Repos</span><b id="tTime">1:30</b></div>
+    <div class="tbar"><i id="tProg"></i></div>
+    <button type="button" id="tPlus">+15 s</button>
+    <button type="button" id="tStop" aria-label="Arrêter le minuteur">×</button>
+  </div>
+  <div class="toast" id="toast" role="status" hidden><span id="toastTxt"></span><button id="undoBtn" type="button">Annuler</button></div>
+</div>
+
+<script src="js/vendor/supabase.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
