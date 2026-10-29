@@ -54,7 +54,7 @@ Menu **Authentication** :
    - **Allow new users to sign up** : activé ;
    - longueur minimale du mot de passe : **8**.
 2. **URL Configuration** :
-   - **Site URL** : `https://TON-PSEUDO-GITHUB.github.io/carnet-forme/` ;
+   - **Site URL** : `https://anemonemite.github.io/carnet-forme/` ;
    - **Redirect URLs** : ajoute la même adresse, plus `http://localhost:8080/**` si tu veux tester sur ton ordinateur.
 3. **Envoi des e-mails (indispensable pour tes amis).** Le service d'e-mails fourni par Supabase n'envoie **qu'aux membres de ton équipe Supabase**, et 2 e-mails par heure au maximum. Tes amis ne recevraient jamais leur e-mail de confirmation. Le plus simple, sans nom de domaine, est d'envoyer avec ton Gmail :
    1. Sur ton compte Google, active la **validation en deux étapes** (Sécurité > Validation en deux étapes).
@@ -85,7 +85,7 @@ Une seule fois :
    git add .
    git commit -m "Carnet Forme : première version"
    git branch -M main
-   git remote add origin https://github.com/TON-PSEUDO-GITHUB/carnet-forme.git
+   git remote add origin https://github.com/anemonemite/carnet-forme.git
    git push -u origin main
    ```
    Tu peux aussi demander à Claude Code de le faire.
@@ -93,7 +93,7 @@ Une seule fois :
    - **Source** : *Deploy from a branch* ;
    - **Branch** : `main` et `/ (root)` ;
    - clique sur **Save**.
-4. Une à deux minutes plus tard, le site est en ligne sur `https://TON-PSEUDO-GITHUB.github.io/carnet-forme/`.
+4. Une à deux minutes plus tard, le site est en ligne sur `https://anemonemite.github.io/carnet-forme/`.
 
 Pour les mises à jour suivantes : `git add . && git commit -m "…" && git push`. Le site se met à jour en une minute environ, et l'app installée affiche la nouvelle version à l'ouverture suivante, parfois la deuxième.
 
@@ -118,7 +118,7 @@ L'artefact garde tes données dans la base de Claude et n'a pas de bouton d'expo
 
 ### 6. Partager avec tes amis
 
-Envoie-leur simplement l'adresse `https://TON-PSEUDO-GITHUB.github.io/carnet-forme/`, avec les consignes de l'étape 4. Chacun crée son compte et ne voit que ses propres données.
+Envoie-leur simplement l'adresse `https://anemonemite.github.io/carnet-forme/`, avec les consignes de l'étape 4. Chacun crée son compte et ne voit que ses propres données.
 
 ---
 
