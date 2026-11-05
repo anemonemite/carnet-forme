@@ -2,7 +2,7 @@
 // Les fichiers du site sont gardés en cache. Stratégie « cache d'abord, mise à jour en arrière-plan » :
 // l'app démarre instantanément, et une nouvelle version mise en ligne s'affiche à l'ouverture suivante.
 // Après une grosse modification, changer VERSION force le renouvellement complet du cache.
-const VERSION = "cf-v5";
+const VERSION = "cf-v6";
 const FILES = [
   "./", "manifest.webmanifest", "css/style.css",
   "js/app.js", "js/auth.js", "js/config.js", "js/data.js", "js/storage.js", "js/vendor/supabase.js",
@@ -10,7 +10,11 @@ const FILES = [
 ];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache: "reload" : on va chercher les fichiers sur le serveur, pas dans le cache du navigateur
+  // (GitHub Pages le laisse garder chaque fichier 10 min, on récupérerait sinon l'ancienne version)
+  e.waitUntil(caches.open(VERSION)
+    .then(c => c.addAll(FILES.map(f => new Request(f, { cache: "reload" }))))
+    .then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys()
@@ -29,7 +33,8 @@ self.addEventListener("fetch", e => {
     // toute ouverture de page (y compris un lien de connexion avec ?… ou #…) sert la page d'accueil
     const key = req.mode === "navigate" ? "./" : req;
     const cached = await cache.match(key, { ignoreSearch: req.mode === "navigate" });
-    const fresh = fetch(req).then(res => {
+    // fichiers du site : « no-cache » = vérifier auprès du serveur (réponse courte si rien n'a changé)
+    const fresh = fetch(req, isFont ? {} : { cache: "no-cache" }).then(res => {
       // une réponse redirigée ne peut pas servir à ouvrir une page : on ne la garde pas
       if (res.ok && !res.redirected) cache.put(key, res.clone());
       return res;

@@ -939,4 +939,13 @@ document.addEventListener("visibilitychange",()=>{
 const cu=cachedUser();
 if(cu)startApp(cu,true); // ouverture immédiate depuis le cache, même sans réseau
 initAuth({onSignedIn:u=>startApp(u,false),onSignedOut});
-if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+// mises à jour de l'app : à chaque retour dans l'app, on regarde si une nouvelle version est en ligne ;
+// dès qu'elle est installée, la page se recharge une fois pour l'afficher (en attendant la fin d'une saisie en cours)
+if("serviceWorker" in navigator){
+  const hadSW=!!navigator.serviceWorker.controller; let reloading=false;
+  const reloadWhenIdle=()=>{const a=document.activeElement;if(a&&a.matches("input,textarea,select"))return setTimeout(reloadWhenIdle,2000);location.reload()};
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{if(hadSW&&!reloading){reloading=true;reloadWhenIdle()}});
+  addEventListener("load",()=>navigator.serviceWorker.register("sw.js").then(reg=>{
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden)reg.update().catch(()=>{})});
+  }).catch(()=>{}));
+}
