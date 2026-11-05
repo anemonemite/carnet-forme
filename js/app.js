@@ -301,6 +301,7 @@ function renderWorkout(){
     const pt=prevDay?(state.days[prevDay].workout||[]).reduce((s,e)=>s+vol(e.ex,e.sets),0):0;
     $("woTotal").innerHTML='<span class="lbl">Tonnage de la séance</span><b>'+fmtKg(tot)+'</b>'+(pt?'<span class="cmp">séance précédente ('+shortDate(prevDay)+') : '+fmtKg(pt)+'</span>':'');
   }
+  renderWoTime();
   $("woToggle").setAttribute("aria-expanded",woCardOpen);
   $("woBody").hidden=!woCardOpen;
   // « Tout replier » (ou « Tout déplier » si tout est déjà replié), affiché dès 2 exercices
@@ -381,7 +382,7 @@ function renderWorkout(){
         if(!(kg>=0)){f.querySelector("#kg-"+wi).focus();return}
         if(!(r>0)){f.querySelector("#rp-"+wi).focus();return}
         document.activeElement&&document.activeElement.blur();
-        editDay(k,x=>{x.workout[wi].sets=x.workout[wi].sets||[];x.workout[wi].sets.push({kg,reps:r})});
+        editDay(k,x=>{x.workout[wi].sets=x.workout[wi].sets||[];x.workout[wi].sets.push({kg,reps:r,t:Date.now()})}); // t : heure de la série
         startRest(restDur);
       });
       body.appendChild(f);
@@ -402,6 +403,50 @@ function renderWorkout(){
 }
 $("woList").addEventListener("focusout",()=>setTimeout(()=>{if(woDirty&&!$("woList").contains(document.activeElement))renderWorkout()},0));
 $("woToggle").onclick=()=>{woCardOpen=!woCardOpen;renderWorkout()};
+// ---------- heures de la séance de musculation ----------
+// automatiques : début = heure de la 1re série, fin = heure de la dernière (champ t de chaque série) ;
+// corrigeables d'un tap, la correction est gardée dans day.muscuTime = {start:"HH:MM", end:"HH:MM"}
+const hhmm=ms=>{const d=new Date(ms);return pad(d.getHours())+":"+pad(d.getMinutes())};
+const toMin=s=>{const [h,m]=String(s).split(":").map(Number);return h*60+m};
+const fmtDur=m=>m>=60?Math.floor(m/60)+" h "+pad(m%60):m+" min";
+const LIVE_MS=20*60000; // aujourd'hui, une série notée il y a moins de 20 min : la séance est « en cours »
+function sessionTime(k){
+  const d=day(k), o=d.muscuTime||{}, ts=[];
+  (d.workout||[]).forEach(e=>(e.sets||[]).forEach(s=>{if(s.t)ts.push(s.t)}));
+  const first=ts.length?Math.min(...ts):null, last=ts.length?Math.max(...ts):null;
+  const live=!o.end&&last!=null&&k===keyOf(new Date())&&Date.now()-last<LIVE_MS;
+  const start=o.start||(first!=null?hhmm(first):null), end=o.end||(last!=null?hhmm(last):null);
+  const until=live?hhmm(Date.now()):end;
+  const dur=start&&until&&toMin(until)>toMin(start)?toMin(until)-toMin(start):null;
+  return {start,end,live,dur};
+}
+let timeEdit=null; // "start" ou "end" pendant la correction d'une heure
+function renderWoTime(){
+  const k=state.sel, el=$("woTime"), hasSets=(day(k).workout||[]).some(e=>(e.sets||[]).length), st=sessionTime(k);
+  el.hidden=!hasSets&&!st.start;
+  if(el.hidden)return;
+  const part=(which,val,empty)=>{
+    if(timeEdit===which)return '<input type="time" class="t-in" data-w="'+which+'" value="'+(val||"")+'" aria-label="'+(which==="start"?"Heure de début":"Heure de fin")+'">';
+    return '<button type="button" class="t-btn" data-w="'+which+'" aria-label="'+(which==="start"?"Modifier l\'heure de début":"Modifier l\'heure de fin")+'">'+(val||empty)+'</button>';
+  };
+  el.innerHTML='<span aria-hidden="true">🕒</span> '+part("start",st.start,"début ?")+' → '+(st.live&&timeEdit!=="end"?'<button type="button" class="t-btn live" data-w="end" aria-label="Séance en cours, modifier l\'heure de fin">en cours</button>':part("end",st.end,"fin ?"))+
+    (st.dur?' <span class="t-dur">· '+fmtDur(st.dur)+'</span>':'');
+  el.querySelectorAll(".t-btn").forEach(b=>b.onclick=()=>{timeEdit=b.dataset.w;renderWoTime();const i=el.querySelector(".t-in");i&&i.focus()});
+  const inp=el.querySelector(".t-in");
+  if(inp){
+    // enregistré en quittant le champ (« OK » sur iPhone, Entrée sur ordinateur) ; champ vidé = retour à l'heure automatique ; Échap annule
+    const w=inp.dataset.w, before=inp.value;
+    const save=()=>{
+      if(timeEdit!==w)return;timeEdit=null;
+      const v=inp.value;if(v===before){renderWoTime();return}
+      editDay(k,x=>{const o=Object.assign({},x.muscuTime||{});if(v)o[w]=v;else delete o[w];if(Object.keys(o).length)x.muscuTime=o;else delete x.muscuTime});
+    };
+    inp.addEventListener("blur",save);
+    inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();inp.blur()}else if(e.key==="Escape"){timeEdit=null;renderWoTime()}});
+  }
+}
+// pendant une séance en cours, la durée avance toute seule ; « en cours » laisse place à l'heure de fin 20 min après la dernière série
+setInterval(()=>{if(!document.hidden&&!$("woTime").hidden&&!timeEdit&&(sessionTime(state.sel).live||$("woTime").querySelector(".live")))renderWoTime()},30000);
 $("foldAll").onclick=()=>{
   const k=state.sel, ids=(day(k).workout||[]).map(w=>k+"|"+w.ex), all=ids.every(id=>folded.has(id));
   ids.forEach(id=>all?folded.delete(id):folded.add(id));renderWorkout();
@@ -795,7 +840,7 @@ function renderHome(){
   let dots=null;
   if(sp.length){dots=document.createElement("span");dots.className="dots";sp.forEach(s=>{const i=document.createElement("i");i.style.setProperty("--c","var(--"+s+")");dots.appendChild(i)})}
   fillTile($("tileSport"),"Séance",sp.length?sp.map(sportShort).join(" + "):d.rest?"Repos":"—",
-    nSets?plural(nSets,"série","séries")+" · "+fmtKg(dayVol(k)):sp.length?"Bien joué !":d.rest?"Récupération":"Pas encore de séance",dots);
+    nSets?plural(nSets,"série","séries")+" · "+(sessionTime(k).dur?fmtDur(sessionTime(k).dur):fmtKg(dayVol(k))):sp.length?"Bien joué !":d.rest?"Récupération":"Pas encore de séance",dots);
   $("tileSport").setAttribute("aria-label","Séance : "+(sp.length?sp.map(sportName).join(", "):d.rest?"repos":"aucune")+". Ouvrir l'onglet Séances");
   const t=target(), tot=total(d), bar=document.createElement("span");
   bar.className="bar"+(t&&tot>=t?" done":"");bar.innerHTML="<i></i>";bar.firstChild.style.width=(t?Math.min(100,tot/t*100):0)+"%";

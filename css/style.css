@@ -350,3 +350,9 @@ select{height:40px;border-radius:9px;border:1px solid var(--line);background:var
 .chips.hscroll>*{flex:none;white-space:nowrap;scroll-snap-align:start}
 /* « Tout replier / Tout déplier » au-dessus des exercices de la séance */
 .fold-all{align-self:flex-end;font-size:13px;margin-bottom:-6px}
+/* heures de la séance : 🕒 18:32 → 19:20 · 48 min (chaque heure se corrige d'un tap) */
+.wo-time{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;font-size:14px;color:var(--muted)}
+.wo-time .t-btn{border:0;border-bottom:1px dashed var(--muted);background:none;padding:2px 1px;font-family:var(--mono);font-size:14px;color:var(--fg)}
+.wo-time .t-btn.live{color:var(--ok);border-bottom-color:var(--ok);font-family:var(--body);font-weight:600}
+.wo-time .t-in{height:34px;border-radius:8px;border:1px solid var(--accent);background:var(--surface);color:var(--fg);padding:0 6px;font:inherit}
+.wo-time .t-dur{font-family:var(--mono);color:var(--fg)}
