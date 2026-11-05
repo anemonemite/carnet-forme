@@ -338,3 +338,8 @@ select{height:40px;border-radius:9px;border:1px solid var(--line);background:var
 /* séance proposée : raison du choix et alertes (icône ⚠ + texte, pas la couleur seule) */
 .plan-ctx .plan-why{color:var(--fg);font-weight:500}
 .plan-ctx .plan-why.warn,.plan-list .pw.warn{color:var(--fg);font-weight:600}
+/* minuteur : les 3 dernières secondes, le chiffre pulse (en même temps que les bips) */
+.timer.soon b{color:var(--accent-soft);animation:tpulse 1s ease-out infinite}
+@keyframes tpulse{0%{transform:scale(1.18)}60%{transform:scale(1)}}
+.timer b{display:inline-block;transform-origin:left center}
+@media (prefers-reduced-motion:reduce){.timer.soon b{animation:none}}

@@ -395,23 +395,36 @@ function paintRestChips(){[...$("restChips").children].forEach(b=>b.setAttribute
 $("restChips").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;restDur=+b.dataset.s;try{localStorage.setItem("carnet-forme-rest",restDur)}catch(_){}paintRestChips();if(tInt)startRest(restDur)});
 paintRestChips();
 const mmss=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
-function beep(){
-  if(!actx)return;
-  try{[0,.25,.5].forEach(t=>{const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=880;o.connect(g);g.connect(actx.destination);
-    const st=actx.currentTime+t;g.gain.setValueAtTime(.0001,st);g.gain.exponentialRampToValueAtTime(.3,st+.02);g.gain.exponentialRampToValueAtTime(.0001,st+.18);o.start(st);o.stop(st+.2)})}catch(e){}
+// sons du minuteur : un bip court à 3, 2 et 1 s, puis un signal plus long et plus aigu pour la reprise
+function tone(freq,at,dur,vol){
+  const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=freq;o.connect(g);g.connect(actx.destination);
+  const st=actx.currentTime+at;g.gain.setValueAtTime(.0001,st);g.gain.exponentialRampToValueAtTime(vol,st+.02);g.gain.exponentialRampToValueAtTime(.0001,st+dur);o.start(st);o.stop(st+dur+.02);
 }
+function beep(kind){
+  if(!actx)return;
+  try{
+    if(actx.state==="suspended")actx.resume();
+    if(kind==="tick")tone(660,0,.12,.25);
+    else{tone(880,0,.16,.3);tone(880,.22,.16,.3);tone(1320,.44,.5,.35)}
+  }catch(e){}
+}
+let lastCue=null; // dernière seconde déjà signalée (évite de bipper deux fois la même)
 function startRest(sec){
   try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();if(actx.state==="suspended")actx.resume()}catch(e){actx=null}
   clearTimeout(tHide);clearInterval(tInt);
-  tTotal=sec;tEnd=Date.now()+sec*1000;
+  tTotal=sec;tEnd=Date.now()+sec*1000;lastCue=null;
   $("timer").classList.remove("done");$("tLbl").textContent="Repos";$("timer").hidden=false;document.body.classList.add("timing");
   try{if(navigator.wakeLock&&!wlock)navigator.wakeLock.request("screen").then(l=>{wlock=l;l.addEventListener("release",()=>{wlock=null})}).catch(()=>{})}catch(e){}
   tick();tInt=setInterval(tick,250);
 }
 function tick(){
   const rem=Math.ceil((tEnd-Date.now())/1000);
+  // compte à rebours sonore sur les 3 dernières secondes, le chiffre pulse en même temps
+  if(rem>3)lastCue=null;
+  else if(rem>=1&&lastCue!==rem){lastCue=rem;beep("tick");try{navigator.vibrate&&navigator.vibrate(60)}catch(e){}}
+  $("timer").classList.toggle("soon",rem>=1&&rem<=3);
   if(rem<=0){
-    clearInterval(tInt);tInt=null;beep();try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}
+    clearInterval(tInt);tInt=null;beep("go");try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}
     $("tTime").textContent="0:00";$("tLbl").textContent="C'est reparti !";$("tProg").style.width="0%";$("timer").classList.add("done");
     tHide=setTimeout(stopRest,8000);return;
   }
@@ -419,13 +432,13 @@ function tick(){
   $("tProg").style.width=Math.max(0,(tEnd-Date.now())/(tTotal*1000)*100)+"%";
 }
 function stopRest(){
-  clearInterval(tInt);tInt=null;clearTimeout(tHide);$("timer").hidden=true;document.body.classList.remove("timing");
+  clearInterval(tInt);tInt=null;clearTimeout(tHide);$("timer").hidden=true;$("timer").classList.remove("soon");document.body.classList.remove("timing");
   try{wlock&&wlock.release()}catch(e){}wlock=null;
 }
 $("restGo").onclick=()=>startRest(restDur);
 $("tPlus").onclick=()=>{if(tInt){tEnd+=15000;tTotal+=15}else startRest(15);tick()};
 $("tStop").onclick=stopRest;
-document.addEventListener("visibilitychange",()=>{if(!document.hidden&&tInt)tick()});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&tInt){try{actx&&actx.state!=="running"&&actx.resume()}catch(e){}tick()}});
 
 function undoable(k,msg,fn){
   const before=JSON.parse(JSON.stringify(day(k)));
