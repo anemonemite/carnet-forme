@@ -203,7 +203,7 @@ const fmtSets=sets=>sets.map(x=>fmt1(x.kg)+" kg × "+x.reps).join(" · ");
 const best=sets=>Math.max(0,...sets.map(x=>+x.kg||0));
 // tonnage = somme charge × reps ; pour les tractions, la charge = poids de corps + lest
 // exercices au poids du corps : part du poids de corps comptée dans le tonnage (le champ kg sert alors au lest)
-const BW_SHARE=[[/traction|pull[- ]?up|chin[- ]?up/i,1],[/^s*dipss*$/i,1],[/pompe|push[- ]?up/i,0.65]];
+const BW_SHARE=[[/traction|pull[- ]?up|chin[- ]?up/i,1],[/^\s*dips\s*$/i,1],[/pompe|push[- ]?up/i,0.65]];
 const bwShare=ex=>{const m=BW_SHARE.find(([r])=>r.test(ex||""));return m?m[1]:0};
 const isBW=ex=>bwShare(ex)>0;
 const effKg=(ex,kg)=>bwShare(ex)*(+state.settings.weight||0)+(+kg||0);
@@ -224,26 +224,38 @@ function prevSessions(ex,k,n){
   return out;
 }
 let woDirty=false;
-// suggestions : exercices les plus faits d'abord, puis les classiques
+// pour la recherche : minuscules, sans accents (« developpe » trouve « Développé », « oeuf » trouve « œuf »)
+const fold=s=>norm(s).normalize("NFD").replace(/\p{M}/gu,"").replace(/œ/g,"oe").replace(/æ/g,"ae");
+// tous les exercices connus : les plus faits d'abord, puis les classiques, puis le reste du catalogue et tes exercices perso
 function allNames(){
   const count={};
   Object.values(state.days).forEach(x=>(x.workout||[]).forEach(e=>{if(e.ex)count[e.ex]=(count[e.ex]||0)+1}));
   const used=Object.keys(count).sort((a,b)=>count[b]-count[a]||a.localeCompare(b,"fr"));
-  const seen=new Set(used.map(norm));
-  return used.concat(DEFAULT_EX.filter(n=>!seen.has(norm(n))));
+  const seen=new Set(used.map(fold));
+  const rest=DEFAULT_EX.concat(fullCatalog().filter(c=>c[5]!=="wait").map(c=>c[0]));
+  return used.concat(rest.filter(n=>!seen.has(fold(n))&&seen.add(fold(n))));
 }
 function addExercise(name){
   name=name.trim();if(!name)return;
-  const known=allNames().find(v=>norm(v)===norm(name));
+  const known=allNames().find(v=>fold(v)===fold(name)); // même exercice malgré les accents ou majuscules
   name=known||name.charAt(0).toUpperCase()+name.slice(1);
   (day(state.sel).workout||[]).forEach(e=>folded.add(state.sel+"|"+e.ex));folded.delete(state.sel+"|"+name);woCardOpen=true;
   editDay(state.sel,x=>{x.workout=x.workout||[];x.workout.push({ex:name,sets:[]});x.sports=x.sports||[];if(!x.sports.includes("muscu"))x.sports.push("muscu");x.rest=false});
   $("woName").value="";renderSugg();
 }
 function renderSugg(){
-  const q=norm($("woName").value);
-  const today=new Set((day(state.sel).workout||[]).map(e=>norm(e.ex)));
-  const list=allNames().filter(n=>!today.has(norm(n))&&(!q||norm(n).includes(q))).slice(0,q?12:8);
+  const q=fold($("woName").value), words=q.split(/\s+/).filter(Boolean);
+  const today=new Set((day(state.sel).workout||[]).map(e=>fold(e.ex)));
+  const names=allNames().filter(n=>!today.has(fold(n)));
+  let list;
+  if(!words.length)list=names.slice(0,8);
+  else{
+    // d'abord les noms qui contiennent tous les mots tapés, puis les exercices dont les muscles ou le groupe correspondent
+    const gName=Object.fromEntries(GROUPS), info=new Map(fullCatalog().map(c=>[fold(c[0]),fold((c[3]||"")+" "+(gName[c[1]]||""))]));
+    const has=(txt)=>words.every(w=>txt.includes(w));
+    const byName=names.filter(n=>has(fold(n))), byMuscle=names.filter(n=>!has(fold(n))&&has(info.get(fold(n))||""));
+    list=byName.concat(byMuscle).slice(0,12);
+  }
   $("suggLbl").textContent=q?(list.length?"Suggestions":"Nouvel exercice : touche Ajouter pour le créer"):"Exercices fréquents · touche pour ajouter";
   const box=$("exSugg");box.innerHTML="";
   list.forEach(n=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=n;b.onclick=()=>addExercise(n);box.appendChild(b)});
