@@ -202,14 +202,18 @@ const shortDate=k=>fromKey(k).toLocaleDateString("fr-FR",{weekday:"short",day:"n
 const fmtSets=sets=>sets.map(x=>fmt1(x.kg)+" kg × "+x.reps).join(" · ");
 const best=sets=>Math.max(0,...sets.map(x=>+x.kg||0));
 // tonnage = somme charge × reps ; pour les tractions, la charge = poids de corps + lest
-const isBW=ex=>/traction|pull[- ]?up|chin[- ]?up/i.test(ex||"");
-const effKg=(ex,kg)=>(isBW(ex)?(+state.settings.weight||0):0)+(+kg||0);
+// exercices au poids du corps : part du poids de corps comptée dans le tonnage (le champ kg sert alors au lest)
+const BW_SHARE=[[/traction|pull[- ]?up|chin[- ]?up/i,1],[/^s*dipss*$/i,1],[/pompe|push[- ]?up/i,0.65]];
+const bwShare=ex=>{const m=BW_SHARE.find(([r])=>r.test(ex||""));return m?m[1]:0};
+const isBW=ex=>bwShare(ex)>0;
+const effKg=(ex,kg)=>bwShare(ex)*(+state.settings.weight||0)+(+kg||0);
 // exercices faits bras par bras (haltères) : tonnage ×2 ; réglable par exercice
 const DEF_ARM=/halt[eè]re|dumbbell|unilat|curl(?!.*barre)/i;
 const perArm=ex=>{const o=(state.settings.perArm||{})[norm(ex)];return o===undefined?DEF_ARM.test(ex||""):!!o};
 const vol=(ex,sets)=>(sets||[]).reduce((s,x)=>s+effKg(ex,x.kg)*(+x.reps||0),0)*(perArm(ex)?2:1);
 const fmtKg=n=>Math.round(n).toLocaleString("fr-FR")+" kg";
-const setTxt=(ex,x)=>(isBW(ex)?(+x.kg>0?"PDC+"+fmt1(x.kg):"PDC"):fmt1(x.kg))+"×"+x.reps;
+// une série en texte : 60×10, PDC×15 (sans charge), PDC+10×8 (lest), 45 s (gainage)
+const setTxt=(ex,x)=>isHold(ex)&&!(+x.kg)?x.reps+" s":(+x.kg>0?(isBW(ex)?"PDC+":"")+fmt1(x.kg):"PDC")+"×"+x.reps;
 function prevSessions(ex,k,n){
   const out=[];
   Object.keys(state.days).filter(x=>x<k).sort().reverse().some(dk=>{
@@ -325,7 +329,7 @@ function renderWorkout(){
     if(open){
       const body=document.createElement("div");body.className="ex-body";
       const info=document.createElement("div");info.className="last";
-      if(last){info.textContent="Dernière fois ("+shortDate(last.k)+") : ";const b=document.createElement("b");b.textContent=last.sets.map(x=>fmt1(x.kg)+"×"+x.reps).join("  ");info.appendChild(b)}
+      if(last){info.textContent="Dernière fois ("+shortDate(last.k)+") : ";const b=document.createElement("b");b.textContent=last.sets.map(x=>setTxt(w.ex,x)).join("  ");info.appendChild(b)}
       else info.textContent="Premier enregistrement de cet exercice.";
       if(last&&sets.length){const diff=best(sets)-best(last.sets);if(diff>0){const u=document.createElement("span");u.className="up";u.textContent=" ↑ +"+fmt1(diff)+" kg";info.appendChild(u)}}
       body.appendChild(info);
@@ -336,7 +340,7 @@ function renderWorkout(){
         vl.textContent="Total : ";const b=document.createElement("b");b.textContent=fmtKg(v);vl.appendChild(b);
         if(last){const pv=vol(w.ex,last.sets);if(pv){const d=Math.round((v-pv)/pv*100);const c=document.createElement("span");c.className=d>0?"up":"";c.textContent=" ("+(d>0?"+":"")+d+" % vs dernière fois : "+fmtKg(pv)+")";vl.appendChild(c)}}
         if(perArm(w.ex))vl.appendChild(document.createTextNode(" · ×2 (par bras)"));
-        if(isBW(w.ex))vl.appendChild(document.createTextNode(state.settings.weight?" · poids de corps ("+fmt1(state.settings.weight)+" kg) inclus":" · renseigne ton poids dans les Réglages pour compter le poids de corps"));
+        if(isBW(w.ex)){const sh=bwShare(w.ex);vl.appendChild(document.createTextNode(state.settings.weight?" · "+(sh<1?Math.round(sh*100)+" % du ":"")+"poids de corps ("+fmt1(state.settings.weight*sh)+" kg) inclus":" · renseigne ton poids dans les Réglages pour compter le poids de corps"))}
         body.appendChild(vl);
       }
       if(sets.length){
@@ -351,12 +355,16 @@ function renderWorkout(){
         body.appendChild(row);
       }
       const ref=sets.length?sets[sets.length-1]:(w.plan&&w.plan.kg!=null?{kg:w.plan.kg,reps:w.plan.reps}:(last?last.sets[last.sets.length-1]:null));
+      const pdc=isBW(w.ex)||equipOf(w.ex)==="pdc"; // exercice au poids du corps : le champ kg sert au lest
       const f=document.createElement("form");f.className="setform";
-      f.innerHTML='<input id="kg-'+wi+'" type="number" inputmode="decimal" min="0" step="0.5" placeholder="kg" aria-label="Charge en kg"><span class="x" aria-hidden="true">kg ×</span><input id="rp-'+wi+'" type="number" inputmode="numeric" min="1" step="1" placeholder="reps" aria-label="Répétitions"><button class="addset" type="submit">+ Série</button>';
-      if(ref){f.querySelector("#kg-"+wi).value=ref.kg;f.querySelector("#rp-"+wi).value=ref.reps}
+      f.innerHTML='<input id="kg-'+wi+'" type="number" inputmode="decimal" min="0" step="0.5" placeholder="'+(pdc?"lest":"kg")+'" aria-label="'+(pdc?"Lest en kg, laisser vide pour le poids du corps":"Charge en kg")+'"><span class="x" aria-hidden="true">kg ×</span><input id="rp-'+wi+'" type="number" inputmode="numeric" min="1" step="1" placeholder="reps" aria-label="Répétitions"><button class="addset" type="submit">+ Série</button>';
+      if(ref){f.querySelector("#kg-"+wi).value=pdc&&!(+ref.kg)?"":ref.kg;f.querySelector("#rp-"+wi).value=ref.reps}
       f.addEventListener("submit",e=>{e.preventDefault();
-        const kg=parseFloat(String(f.querySelector("#kg-"+wi).value).replace(",",".")), r=parseInt(f.querySelector("#rp-"+wi).value,10);
-        if(!(kg>=0)||!(r>0))return;
+        let kg=parseFloat(String(f.querySelector("#kg-"+wi).value).replace(",",".")), r=parseInt(f.querySelector("#rp-"+wi).value,10);
+        // exercice au poids du corps : charge vide = sans lest ; ailleurs la charge reste obligatoire
+        if(String(f.querySelector("#kg-"+wi).value).trim()===""&&pdc)kg=0;
+        if(!(kg>=0)){f.querySelector("#kg-"+wi).focus();return}
+        if(!(r>0)){f.querySelector("#rp-"+wi).focus();return}
         document.activeElement&&document.activeElement.blur();
         editDay(k,x=>{x.workout[wi].sets=x.workout[wi].sets||[];x.workout[wi].sets.push({kg,reps:r})});
         startRest(restDur);
@@ -369,7 +377,7 @@ function renderWorkout(){
       if(prev.length>1){
         const det=document.createElement("details");det.className="hist";
         det.innerHTML="<summary>Historique</summary><ul></ul>";
-        prev.forEach(pv=>{const li=document.createElement("li");li.innerHTML="<span></span><span></span>";li.firstChild.textContent=shortDate(pv.k);li.lastChild.textContent=pv.sets.map(x=>fmt1(x.kg)+"×"+x.reps).join("  ");det.querySelector("ul").appendChild(li)});
+        prev.forEach(pv=>{const li=document.createElement("li");li.innerHTML="<span></span><span></span>";li.firstChild.textContent=shortDate(pv.k);li.lastChild.textContent=pv.sets.map(x=>setTxt(w.ex,x)).join("  ");det.querySelector("ul").appendChild(li)});
         body.appendChild(det);
       }
       ex.appendChild(body);
@@ -582,7 +590,7 @@ function progression(ex,k){
   if(hold)return {sets:n,reps:minR+5,kg:top,why:said+"tiens 5 s de plus.",up:true};
   // sans charge (poids du corps) : lest de 2,5 kg pour les tractions et dips en haut de fourchette, sinon une rep de plus
   if(!top){
-    if((isBW(ex)||norm(ex)==="dips")&&minR>=hi)return {sets:n,reps:lo,kg:2.5,why:said+hi+" reps tenues : ajoute 2,5 kg de lest et repars à "+lo+" reps.",up:true};
+    if(bwShare(ex)===1&&minR>=hi)return {sets:n,reps:lo,kg:2.5,why:said+hi+" reps tenues : ajoute 2,5 kg de lest et repars à "+lo+" reps.",up:true};
     return {sets:n,reps:minR+1,kg:0,why:said+"vise une rep de plus.",up:true};
   }
   // double progression : on monte les reps jusqu'au haut de la fourchette, puis la charge
