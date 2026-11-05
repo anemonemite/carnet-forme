@@ -282,7 +282,13 @@ function renderWorkout(){
     tg.onclick=()=>{open?folded.add(id):folded.delete(id);renderWorkout()};
     const del=document.createElement("button");del.className="del";del.setAttribute("aria-label","Supprimer l'exercice "+w.ex);del.textContent="×";
     del.onclick=()=>undoable(k,w.ex+" retiré",x=>x.workout.splice(wi,1));
-    head.append(tg,del);ex.appendChild(head);
+    // monter / descendre l'exercice dans la séance ; le focus reste sur le bouton pour enchaîner
+    const move=(to,cls)=>{editDay(k,x=>{x.workout.splice(to,0,x.workout.splice(wi,1)[0])});
+      const b=$("woList").querySelectorAll(".ex")[to];const f=b&&b.querySelector("."+cls+":not(:disabled)");f&&f.focus()};
+    const up=document.createElement("button");up.type="button";up.className="del mv mv-up";up.textContent="↑";up.setAttribute("aria-label","Monter "+w.ex);up.disabled=wi===0;up.onclick=()=>move(wi-1,"mv-up");
+    const down=document.createElement("button");down.type="button";down.className="del mv mv-down";down.textContent="↓";down.setAttribute("aria-label","Descendre "+w.ex);down.disabled=wi===list.length-1;down.onclick=()=>move(wi+1,"mv-down");
+    if(list.length<2){up.hidden=down.hidden=true}
+    head.append(tg,up,down,del);ex.appendChild(head);
     if(open){
       const body=document.createElement("div");body.className="ex-body";
       const info=document.createElement("div");info.className="last";
