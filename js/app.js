@@ -183,9 +183,16 @@ function removeEntry(k,field,i,msg){
   $("toastTxt").textContent=msg;$("toast").hidden=false;
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$("toast").hidden=true;undo=null},6000);
 }
+// bandeau « Annuler » pour une action qui ne touche pas une journée (ex. retirer un exercice de la proposition)
+function showUndo(msg,fn){
+  undo={fn};
+  $("toastTxt").textContent=msg;$("toast").hidden=false;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$("toast").hidden=true;undo=null},6000);
+}
 $("undoBtn").onclick=()=>{
   if(!undo)return;const u=undo;undo=null;
-  editDay(u.k,x=>{Object.keys(x).forEach(f=>delete x[f]);Object.assign(x,JSON.parse(JSON.stringify(u.before)))});
+  if(u.fn)u.fn();
+  else editDay(u.k,x=>{Object.keys(x).forEach(f=>delete x[f]);Object.assign(x,JSON.parse(JSON.stringify(u.before)))});
   clearTimeout(toastTimer);$("toast").hidden=true;
 };
 
@@ -533,7 +540,7 @@ function renderPlan(){
   const inDay=new Set((day(plan.k).workout||[]).map(e=>norm(e.ex)));
   const head=document.createElement("div");head.className="plan-head";
   head.innerHTML='<b></b><span class="lbl"></span>';
-  head.firstChild.textContent=plan.tpl.name;head.lastChild.textContent=plan.items.length+" exercices";
+  head.firstChild.textContent=plan.tpl.name;head.lastChild.textContent=plural(plan.items.length,"exercice","exercices");
   const ctx=document.createElement("div");ctx.className="plan-ctx";
   const l1=document.createElement("span");
   if(plan.first)l1.textContent="Aucune séance de muscu enregistrée : un full body pour démarrer.";
@@ -541,18 +548,30 @@ function renderPlan(){
   const l2=document.createElement("span");l2.textContent=plan.first?"":"Récupération : "+plan.recov.join(" · ");
   ctx.append(l1);if(!plan.first)ctx.append(l2);
   const ul=document.createElement("ul");ul.className="plan-list";
+  // après un clic, on redonne le focus au même bouton (sur la ligne qui a bougé) pour enchaîner au clavier
+  const refocus=(i,cls)=>{const b=$("planBox").querySelectorAll(".plan-list li")[i];const x=b&&b.querySelector("."+cls+":not(:disabled)");x&&x.focus()};
+  const btn=(cls,txt,label,title,on)=>{const b=document.createElement("button");b.type="button";b.className="reroll "+cls;b.textContent=txt;b.setAttribute("aria-label",label);b.title=title;b.onclick=on;return b};
   plan.items.forEach((it,i)=>{
     const li=document.createElement("li");
     const n=document.createElement("span");n.className="pn";n.textContent=it.ex+(inDay.has(norm(it.ex))?" ✓":"");
     const t=document.createElement("span");t.className="pt";t.textContent=planTxt(it.ex,it.p);
     const w=document.createElement("span");w.className="pw";w.textContent=it.p.why;
-    const r=document.createElement("button");r.type="button";r.className="reroll";r.textContent="↻";
-    r.setAttribute("aria-label","Remplacer "+it.ex+" par un autre exercice");r.title="Autre exercice";
+    const acts=document.createElement("span");acts.className="pa";
+    // monter / descendre : change l'ordre des exercices (repris tel quel par « Ajouter à la séance »)
+    const up=btn("p-up","↑","Monter "+it.ex,"Monter",()=>{plan.items.splice(i-1,0,plan.items.splice(i,1)[0]);renderPlan();refocus(i-1,"p-up")});
+    const down=btn("p-down","↓","Descendre "+it.ex,"Descendre",()=>{plan.items.splice(i+1,0,plan.items.splice(i,1)[0]);renderPlan();refocus(i+1,"p-down")});
+    up.disabled=i===0;down.disabled=i===plan.items.length-1;
+    const r=btn("p-reroll","↻","Remplacer "+it.ex+" par un autre exercice","Autre exercice",()=>{const n=rerollPick(i);if(!n)return;it.ex=n;it.p=progression(n,plan.k);it.seen.push(norm(n));renderPlan();refocus(i,"p-reroll")});
     r.disabled=!rerollPick(i,true);
-    r.onclick=()=>{const n=rerollPick(i);if(!n)return;it.ex=n;it.p=progression(n,plan.k);it.seen.push(norm(n));renderPlan();
-      const b=$("planBox").querySelectorAll(".reroll")[i];b&&b.focus()};
-    li.append(n,t,r,w);ul.appendChild(li);
+    // retirer de la proposition, avec « Annuler » dans le bandeau du bas
+    const x=btn("p-del","×","Retirer "+it.ex+" de la proposition","Retirer",()=>{
+      const p=plan;p.items.splice(i,1);renderPlan();
+      showUndo(it.ex+" retiré de la proposition",()=>{if(plan===p){p.items.splice(i,0,it);renderPlan()}});
+    });
+    acts.append(up,down,r,x);
+    li.append(n,t,w,acts);ul.appendChild(li);
   });
+  if(!plan.items.length){const li=document.createElement("li");li.className="empty";li.textContent="Tous les exercices ont été retirés. Touche « Autre proposition » pour repartir d'une nouvelle séance.";ul.appendChild(li)}
   const acts=document.createElement("div");acts.className="plan-acts";
   const todo=plan.items.filter(it=>!inDay.has(norm(it.ex)));
   const isToday=plan.k===keyOf(new Date());
