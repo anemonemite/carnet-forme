@@ -343,3 +343,10 @@ select{height:40px;border-radius:9px;border:1px solid var(--line);background:var
 @keyframes tpulse{0%{transform:scale(1.18)}60%{transform:scale(1)}}
 .timer b{display:inline-block;transform-origin:left center}
 @media (prefers-reduced-motion:reduce){.timer.soon b{animation:none}}
+/* lignes défilantes (même principe que les ajouts rapides) : exercices fréquents, séance du jour */
+.chips.hscroll{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:1px 24px 1px 0;margin-right:-16px;scroll-snap-type:x proximity;
+  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}
+.chips.hscroll::-webkit-scrollbar{display:none}
+.chips.hscroll>*{flex:none;white-space:nowrap;scroll-snap-align:start}
+/* « Tout replier / Tout déplier » au-dessus des exercices de la séance */
+.fold-all{align-self:flex-end;font-size:13px;margin-bottom:-6px}

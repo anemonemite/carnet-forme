@@ -303,6 +303,9 @@ function renderWorkout(){
   }
   $("woToggle").setAttribute("aria-expanded",woCardOpen);
   $("woBody").hidden=!woCardOpen;
+  // « Tout replier » (ou « Tout déplier » si tout est déjà replié), affiché dès 2 exercices
+  const allFolded=list.length>0&&list.every(w=>folded.has(k+"|"+w.ex));
+  $("foldAll").hidden=list.length<2;$("foldAll").textContent=allFolded?"Tout déplier":"Tout replier";
   box.innerHTML="";
   if(!list.length){const p=document.createElement("p");p.className="empty";p.style.margin="0";p.textContent="Ajoute ton premier exercice : la charge et les reps de ta dernière séance s'afficheront automatiquement.";box.appendChild(p)}
   list.forEach((w,wi)=>{
@@ -399,6 +402,10 @@ function renderWorkout(){
 }
 $("woList").addEventListener("focusout",()=>setTimeout(()=>{if(woDirty&&!$("woList").contains(document.activeElement))renderWorkout()},0));
 $("woToggle").onclick=()=>{woCardOpen=!woCardOpen;renderWorkout()};
+$("foldAll").onclick=()=>{
+  const k=state.sel, ids=(day(k).workout||[]).map(w=>k+"|"+w.ex), all=ids.every(id=>folded.has(id));
+  ids.forEach(id=>all?folded.delete(id):folded.add(id));renderWorkout();
+};
 $("woForm").addEventListener("submit",e=>{e.preventDefault();addExercise($("woName").value)});
 // ---------- minuteur de repos ----------
 let restDur=90, tEnd=0, tTotal=0, tInt=null, actx=null, wlock=null, tHide=null;
