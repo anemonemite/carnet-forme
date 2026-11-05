@@ -382,7 +382,9 @@ function renderWorkout(){
         if(!(kg>=0)){f.querySelector("#kg-"+wi).focus();return}
         if(!(r>0)){f.querySelector("#rp-"+wi).focus();return}
         document.activeElement&&document.activeElement.blur();
-        editDay(k,x=>{x.workout[wi].sets=x.workout[wi].sets||[];x.workout[wi].sets.push({kg,reps:r,t:Date.now()})}); // t : heure de la série
+        editDay(k,x=>{x.workout[wi].sets=x.workout[wi].sets||[];x.workout[wi].sets.push({kg,reps:r,t:Date.now()}); // t : heure de la série
+          // une série notée après la fin enregistrée : la séance reprend (la fin redevient automatique)
+          if(x.muscuTime&&x.muscuTime.end&&k===keyOf(new Date())&&toMin(x.muscuTime.end)<=toMin(hhmm(Date.now()))){delete x.muscuTime.end;if(!x.muscuTime.start)delete x.muscuTime}});
         startRest(restDur);
       });
       body.appendChild(f);
@@ -430,7 +432,15 @@ function renderWoTime(){
     return '<button type="button" class="t-btn" data-w="'+which+'" aria-label="'+(which==="start"?"Modifier l\'heure de début":"Modifier l\'heure de fin")+'">'+(val||empty)+'</button>';
   };
   el.innerHTML='<span aria-hidden="true">🕒</span> '+part("start",st.start,"début ?")+' → '+(st.live&&timeEdit!=="end"?'<button type="button" class="t-btn live" data-w="end" aria-label="Séance en cours, modifier l\'heure de fin">en cours</button>':part("end",st.end,"fin ?"))+
-    (st.dur?' <span class="t-dur">· '+fmtDur(st.dur)+'</span>':'');
+    (st.dur?' <span class="t-dur">· '+fmtDur(st.dur)+'</span>':'')+
+    (st.live&&!timeEdit?' <button type="button" class="t-end">Terminer</button>':'');
+  const endBtn=el.querySelector(".t-end");
+  // « Terminer » : la fin est maintenant (sans attendre les 20 min), le minuteur de repos s'arrête
+  if(endBtn)endBtn.onclick=()=>{
+    const now=hhmm(Date.now()), d=sessionTime(k).dur;
+    if(tInt||!$("timer").hidden)stopRest();
+    undoable(k,"Séance terminée"+(d?" · "+fmtDur(d):""),x=>{x.muscuTime=Object.assign({},x.muscuTime||{},{end:now})});
+  };
   el.querySelectorAll(".t-btn").forEach(b=>b.onclick=()=>{timeEdit=b.dataset.w;renderWoTime();const i=el.querySelector(".t-in");i&&i.focus()});
   const inp=el.querySelector(".t-in");
   if(inp){
