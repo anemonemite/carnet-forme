@@ -246,6 +246,27 @@ function renderSugg(){
 }
 $("woName").addEventListener("input",renderSugg);
 const folded=new Set(); let woCardOpen=true, lastAdded=null;
+// ↻ dans la séance : exercice suivant du même groupe (mêmes critères que la séance proposée : tes habitudes, puis les classiques),
+// sans doublon dans la séance ; on fait défiler les choix, puis on repart du début
+let swapAsk=null, swapCands=null; const swapSeen={};
+function swapPick(k,wi){
+  const list=day(k).workout||[], w=list[wi], g=w&&groupOf(w.ex);
+  if(!g)return null; // exercice pas encore classé : pas de groupe, pas de remplaçant
+  swapCands=swapCands||buildPlan(k,0).candsFor; // calculé une fois par affichage
+  const inDay=new Set(list.map(e=>norm(e.ex))), pool=swapCands(g).filter(n=>!inDay.has(norm(n)));
+  const seen=swapSeen[k+"|"+wi]||[];
+  return pool.find(n=>!seen.includes(norm(n)))||pool[0]||null;
+}
+function swapExercise(k,wi){
+  const n=swapPick(k,wi), old=(day(k).workout||[])[wi];if(!n||!old)return;
+  const key=k+"|"+wi, seen=swapSeen[key]||[norm(old.ex)];
+  swapSeen[key]=seen.includes(norm(n))?[norm(old.ex),norm(n)]:seen.concat(norm(n)); // liste parcourue : on repart du début
+  if(folded.has(k+"|"+old.ex))folded.add(k+"|"+n);
+  // un exercice venu de la séance proposée garde un objectif, recalculé pour le nouvel exercice
+  const p=old.plan?progression(n,k):null;
+  undoable(k,old.ex+" remplacé par "+n,x=>{x.workout[wi]=p?{ex:n,sets:[],plan:Object.assign({sets:p.sets,reps:p.reps,kg:p.kg},p.deload?{deload:true}:{})}:{ex:n,sets:[]}});
+  const c=$("woList").querySelectorAll(".ex")[wi];const b=c&&c.querySelector(".mv-swap:not(:disabled)");b&&b.focus();
+}
 function renderWorkout(){
   const k=state.sel, d=day(k), list=d.workout||[];
   const show=(d.sports||[]).includes("muscu");
@@ -253,7 +274,7 @@ function renderWorkout(){
   if(!show)return;
   const box=$("woList");
   if(box.contains(document.activeElement)&&document.activeElement.tagName==="INPUT"){woDirty=true;return}
-  woDirty=false;
+  woDirty=false;swapCands=null;
   renderSugg();
   const nSets=list.reduce((s,e)=>s+(e.sets||[]).length,0);
   const tot=list.reduce((s,e)=>s+vol(e.ex,e.sets),0);
@@ -288,7 +309,19 @@ function renderWorkout(){
     const up=document.createElement("button");up.type="button";up.className="del mv mv-up";up.textContent="↑";up.setAttribute("aria-label","Monter "+w.ex);up.disabled=wi===0;up.onclick=()=>move(wi-1,"mv-up");
     const down=document.createElement("button");down.type="button";down.className="del mv mv-down";down.textContent="↓";down.setAttribute("aria-label","Descendre "+w.ex);down.disabled=wi===list.length-1;down.onclick=()=>move(wi+1,"mv-down");
     if(list.length<2){up.hidden=down.hidden=true}
-    head.append(tg,up,down,del);ex.appendChild(head);
+    // remplacer par un autre exercice du même groupe ; confirmation seulement si des séries sont déjà notées
+    const next=swapPick(k,wi), rr=document.createElement("button");rr.type="button";rr.className="del mv mv-swap";rr.textContent="↻";
+    rr.setAttribute("aria-label","Remplacer "+w.ex+" par un autre exercice");rr.title=next?"Autre exercice":"Pas d'autre exercice dans ce groupe";rr.disabled=!next;
+    rr.onclick=()=>{if(sets.length){swapAsk=id;renderWorkout();const c=$("woList").querySelectorAll(".ex")[wi];c&&c.querySelector(".swap-go").focus()}else swapExercise(k,wi)};
+    head.append(tg,up,down,rr,del);ex.appendChild(head);
+    if(swapAsk===id&&next){
+      const c=document.createElement("div");c.className="confirm";
+      c.innerHTML='<p></p><div class="btnrow"><button type="button" class="danger solid swap-go">Remplacer</button><button type="button" class="ghost swap-no">Annuler</button></div>';
+      c.querySelector("p").textContent="Remplacer "+w.ex+" par "+next+" ? "+(sets.length>1?"Les "+sets.length+" séries notées seront supprimées.":"La série notée sera supprimée.");
+      c.querySelector(".swap-go").onclick=()=>{swapAsk=null;swapExercise(k,wi)};
+      c.querySelector(".swap-no").onclick=()=>{swapAsk=null;renderWorkout()};
+      ex.appendChild(c);
+    }
     if(open){
       const body=document.createElement("div");body.className="ex-body";
       const info=document.createElement("div");info.className="last";
