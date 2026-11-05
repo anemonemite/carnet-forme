@@ -49,11 +49,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .bar.done i{background:var(--ok)}
 .status{font-size:13px;color:var(--muted)}
 .status b{color:var(--fg)}
-.quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.qbtn{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;gap:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);text-align:left;font-size:14px}
+/* ajouts rapides : une ligne qu'on fait défiler du doigt ; le fondu à droite signale qu'il y en a d'autres */
+.quick{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:1px 24px 1px 0;margin-right:-16px;scroll-snap-type:x proximity;
+  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}
+.quick::-webkit-scrollbar{display:none}
+.qbtn{flex:none;display:flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--bg);font-size:14px;white-space:nowrap;scroll-snap-align:start}
 .qbtn:hover{border-color:var(--accent)}
-.qbtn span:first-child{font-weight:500;line-height:1.25}
-.qbtn span:last-child{font-family:var(--mono);font-size:12px;color:var(--accent);white-space:nowrap}
+.qbtn span:first-child{font-weight:500}
+.qbtn span:last-child{font-family:var(--mono);font-size:12.5px;color:var(--accent)}
 .custom{display:flex;gap:8px;flex-wrap:wrap}
 .custom input{flex:1 1 120px;min-width:0;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);padding:0 12px;font:inherit}
 .custom input[type=number]{flex:0 1 90px}
