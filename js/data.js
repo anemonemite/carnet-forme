@@ -77,3 +77,20 @@ export const TEMPLATES=[
   {id:"pull",name:"Tirage",groups:[["dos",3],["biceps",2]]},
   {id:"legs",name:"Jambes",groups:[["jambes",3],["fessiers",1],["mollets",1]]}
 ];
+
+// ---------- séance proposée : types d'exercices (fourchettes de reps) et grands classiques ----------
+// exercices de base (polyarticulaires lourds) : 6-10 reps ; isolation : 10-15 ; abdos : 12-20 ; les autres : 8-12
+export const BASE_EX=["Développé couché","Développé incliné","Développé couché haltères","Développé incliné haltères","Dips","Tractions",
+  "Rowing barre","Rowing haltère","Soulevé de terre","Développé militaire","Développé haltères assis","Squat","Presse à cuisses",
+  "Hack squat","Soulevé de terre roumain","Hip thrust","Développé couché prise serrée"];
+export const ISO_EX=["Écarté haltères","Écarté poulie vis-à-vis","Pec deck","Pull-over poulie","Élévations latérales","Élévations latérales poulie",
+  "Oiseau haltères","Face pull","Shrugs haltères","Curl barre","Curl haltères","Curl marteau","Curl incliné haltères","Pupitre biceps machine",
+  "Extension triceps poulie","Barre au front","Extension triceps au-dessus de la tête","Kickback triceps","Leg extension","Leg curl",
+  "Abducteurs machine","Kickback fessier poulie","Mollets debout machine","Mollets assis machine"];
+// proposés en priorité pour un groupe jamais travaillé, dans cet ordre
+export const CLASSICS=["Développé couché","Développé couché haltères","Développé incliné haltères","Pec deck","Dips",
+  "Tirage vertical","Rowing barre","Tractions","Tirage horizontal poulie","Rowing haltère",
+  "Développé militaire","Développé haltères assis","Élévations latérales","Face pull","Oiseau haltères",
+  "Curl haltères","Curl barre","Curl marteau","Extension triceps poulie","Barre au front","Dips banc",
+  "Squat","Presse à cuisses","Soulevé de terre roumain","Leg curl","Leg extension","Fentes",
+  "Hip thrust","Abducteurs machine","Mollets debout machine","Crunch poulie","Gainage planche","Relevés de jambes suspendu"];

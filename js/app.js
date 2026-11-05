@@ -1,6 +1,6 @@
 // ---------- Carnet Forme : logique de l'app (rendu, repas, musculation, catalogue, séance proposée, minuteur) ----------
 // Repris de l'artefact d'origine ; seuls le stockage, les comptes et l'IA ont changé.
-import { SPORTS, QUICK, DEFAULT_EX, GROUPS, EQUIP, CATALOG, TEMPLATES } from "./data.js";
+import { SPORTS, QUICK, DEFAULT_EX, GROUPS, EQUIP, CATALOG, TEMPLATES, BASE_EX, ISO_EX, CLASSICS } from "./data.js";
 import * as storage from "./storage.js";
 import { initAuth, showAuth, hideAuth, cachedUser, forgetUser, signOut, changePassword, deleteAccount, frError } from "./auth.js";
 
@@ -474,62 +474,126 @@ function renderCatalog(){
 }
 
 // ---------- séance proposée ----------
-// rotation poussée / tirage / jambes : on choisit le bloc dont le groupe principal a le plus récupéré
-// full body : une base jambes / pecs / dos / épaules, plus un bras et un tronc ou bas du corps, choisis parmi les moins travaillés récemment
+// Réglages retenus : objectif prise de muscle, séance d'environ 45 min (5 exercices), 48 h de repos par groupe.
+const REST_DAYS=2;  // un groupe travaillé il y a moins de 2 jours est encore en récupération
+// full body : jambes, pecs, dos, épaules, plus le bras (biceps ou triceps) le moins travaillé récemment
 function fullBody(since){
   const oldest=gs=>gs.map((g,i)=>({g,i,d:since(g)==null?999:since(g)})).sort((a,b)=>b.d-a.d||a.i-b.i)[0].g;
-  return {id:"full",name:"Full body",groups:[["jambes",1],["pecs",1],["dos",1],["epaules",1],[oldest(["biceps","triceps"]),1],[oldest(["abdos","fessiers","mollets"]),1]]};
+  return {id:"full",name:"Full body",groups:[["jambes",1],["pecs",1],["dos",1],["epaules",1],[oldest(["biceps","triceps"]),1]]};
 }
+// groupes principaux d'une séance : ceux qui doivent être reposés pour la proposer
+const mainGroups=t=>t.id==="full"?["jambes","pecs","dos","epaules"]:t.groups.filter(([,c])=>c>=2).map(([g])=>g);
 const groupOf=n=>{const c=fullCatalog().find(c=>norm(c[0])===norm(n));return c?c[1]:null};
 const equipOf=n=>{const c=fullCatalog().find(c=>norm(c[0])===norm(n));return c?c[2]:null};
 const dayDiff=(a,b)=>Math.round((fromKey(a)-fromKey(b))/864e5);
-const planTxt=(ex,p)=>p.sets+" × "+p.reps+(p.kg==null?"":(isBW(ex)||!p.kg)?(p.kg>0?" · PDC+"+fmt1(p.kg)+" kg":" · PDC"):" · "+fmt1(p.kg)+" kg");
+const isHold=ex=>/gainage|planche/i.test(ex||""); // exercice tenu : le champ reps contient des secondes
+const planTxt=(ex,p)=>p.sets+" × "+p.reps+(isHold(ex)?" s":"")+(p.kg==null?"":(isBW(ex)||!p.kg)?(p.kg>0?" · PDC+"+fmt1(p.kg)+" kg":isHold(ex)?"":" · PDC"):" · "+fmt1(p.kg)+" kg");
 let plan=null, planShift=0;
+
+// type d'exercice → fourchette de reps (prise de muscle)
+const inList=(list,n)=>list.some(x=>norm(x)===norm(n));
+function exType(ex){
+  const g=groupOf(ex);
+  if(g==="abdos")return "abdos";
+  if(inList(BASE_EX,ex))return "base";
+  if(inList(ISO_EX,ex)||["biceps","triceps","mollets"].includes(g))return "iso";
+  return "autre";
+}
+const RANGES={base:[6,10],autre:[8,12],iso:[10,15],abdos:[12,20]};
+const TYPE_ORDER={base:0,autre:1,iso:2,abdos:3};
 
 function sessionLog(k){
   return Object.keys(state.days).filter(x=>x<=k&&(state.days[x].workout||[]).some(e=>(e.sets||[]).length)).sort().reverse();
 }
+// dernières séances d'un exercice (la plus récente d'abord), avec l'objectif qui avait été proposé
+function exHistory(ex,k,n){
+  const out=[];
+  Object.keys(state.days).filter(x=>x<k).sort().reverse().some(dk=>{
+    const w=(state.days[dk].workout||[]).find(e=>norm(e.ex)===norm(ex)&&(e.sets||[]).length);
+    if(w)out.push({k:dk,sets:w.sets,plan:w.plan});
+    return out.length>=n;
+  });
+  return out;
+}
+// performance d'une séance : charge max, puis total de reps à cette charge
+function perf(sets){const t=best(sets);return {t,r:sets.filter(x=>(+x.kg||0)===t).reduce((a,x)=>a+(+x.reps||0),0)}}
+const beats=(a,b)=>a.t>b.t||(a.t===b.t&&a.r>b.r);
+// stagnation : les 3 dernières séances n'ont pas battu la meilleure performance d'avant
+// (sauf si une séance allégée a déjà été proposée récemment : on laisse le temps de remonter)
+function stalled(h){
+  if(h.length<4||h.slice(0,3).some(x=>x.plan&&x.plan.deload))return false;
+  const ref=h.slice(3).map(x=>perf(x.sets)).reduce((m,p)=>beats(p,m)?p:m);
+  return !h.slice(0,3).some(x=>beats(perf(x.sets),ref));
+}
 function progression(ex,k){
-  const prev=prevSessions(ex,k+"~",1)[0];
-  if(!prev)return {sets:3,reps:10,kg:null,why:"Nouveau : trouve une charge qui te laisse 10 à 12 reps propres."};
+  const type=exType(ex), hold=isHold(ex), [lo,hi]=hold?[30,60]:RANGES[type], unit=hold?" s":" reps";
+  const h=exHistory(ex,k+"~",8), prev=h[0];
+  if(!prev)return {sets:3,reps:lo,kg:null,why:hold?"Nouveau : tiens "+lo+" à "+hi+" s par série.":"Nouveau : choisis une charge qui te permet "+lo+" à "+hi+" reps propres."};
   const s=prev.sets, top=best(s), topSets=s.filter(x=>(+x.kg||0)===top);
   const minR=Math.min(...topSets.map(x=>+x.reps||0)), n=Math.max(3,Math.min(4,s.length));
-  const gap=dayDiff(k,prev.k), when=shortDate(prev.k);
-  const last=s.map(x=>setTxt(ex,x)).join(", ");
+  const gap=dayDiff(k,prev.k), when=shortDate(prev.k), last=s.map(x=>setTxt(ex,x)).join(", ");
+  const said="Le "+when+" : "+last+" → ";
   if(gap>21)return {sets:n,reps:minR,kg:top,why:"Reprise après "+gap+" jours : mêmes charges que le "+when+"."};
-  if(!top)return {sets:n,reps:minR+1,kg:0,why:"Le "+when+" : "+last+" → vise une rep de plus.",up:true};
-  if(minR>=12){
-    const step=(equipOf(ex)==="halteres"||perArm(ex))?2:2.5;
-    return {sets:n,reps:8,kg:top+step,why:"Le "+when+" : "+last+" → 12 reps tenues, on monte de "+fmt1(step)+" kg.",up:true};
+  // stagnation : on allège de 10 % et on ajoute une série, en visant le haut de la fourchette
+  if(stalled(h)){
+    const kg=top>0?Math.round(top*0.9*2)/2:top;
+    return {sets:Math.min(6,s.length+1),reps:hold?Math.max(lo,minR):hi,kg,deload:true,stall:true,
+      why:"⚠ Pas de progrès depuis 3 séances : "+(top>0?"on allège de 10 % ("+fmt1(top)+" → "+fmt1(kg)+" kg) et ":"")+"on ajoute une série"+(hold?"":" en visant "+hi+" reps")+" pour relancer."};
   }
-  return {sets:n,reps:Math.max(6,minR+1),kg:top,why:"Le "+when+" : "+last+" → même charge, une rep de plus.",up:true};
+  if(hold)return {sets:n,reps:minR+5,kg:top,why:said+"tiens 5 s de plus.",up:true};
+  // sans charge (poids du corps) : lest de 2,5 kg pour les tractions et dips en haut de fourchette, sinon une rep de plus
+  if(!top){
+    if((isBW(ex)||norm(ex)==="dips")&&minR>=hi)return {sets:n,reps:lo,kg:2.5,why:said+hi+" reps tenues : ajoute 2,5 kg de lest et repars à "+lo+" reps.",up:true};
+    return {sets:n,reps:minR+1,kg:0,why:said+"vise une rep de plus.",up:true};
+  }
+  // double progression : on monte les reps jusqu'au haut de la fourchette, puis la charge
+  if(minR>=hi){
+    const step=(equipOf(ex)==="halteres"||perArm(ex))?2:2.5;
+    return {sets:n,reps:lo,kg:top+step,why:said+hi+" reps tenues sur toutes les séries : +"+fmt1(step)+" kg et on repart à "+lo+" reps.",up:true};
+  }
+  const r=Math.min(hi,Math.max(lo,minR+1));
+  return {sets:n,reps:r,kg:top,why:said+"même charge, vise "+r+unit+" (fourchette "+lo+"-"+hi+").",up:true};
 }
 function buildPlan(k,shift){
-  const log=sessionLog(k), lastDate={};
+  const log=sessionLog(k), lastDate={}, gName=Object.fromEntries(GROUPS);
   log.slice().reverse().forEach(dk=>(state.days[dk].workout||[]).forEach(e=>{if((e.sets||[]).length){const g=groupOf(e.ex);if(g)lastDate[g]=dk}}));
   const since=g=>lastDate[g]?dayDiff(k,lastDate[g]):null;
-  // full body proposé en premier ; « Autre proposition » passe ensuite aux séances ciblées, le bloc le plus reposé d'abord
-  const ranked=[fullBody(since)].concat(log.length?TEMPLATES.map((t,i)=>{const d=since(t.groups[0][0]);return {t,i,d:d==null?999:d}}).sort((a,b)=>b.d-a.d||a.i-b.i).map(x=>x.t):[]);
-  const tpl=ranked[shift%ranked.length];
-  // fréquence de chaque exercice sur 60 jours, pour garder tes habitudes
-  const freq={}, recent={};
-  log.filter(dk=>dayDiff(k,dk)<=60).forEach(dk=>(state.days[dk].workout||[]).forEach(e=>{if((e.sets||[]).length){const n=norm(e.ex);freq[n]=(freq[n]||0)+1;if(!recent[n])recent[n]=dk}}));
-  const inDay=new Set((day(k).workout||[]).map(e=>norm(e.ex)));
+  const tired=g=>{const d=since(g);return d!=null&&d<REST_DAYS};
+  const rest=t=>Math.min(...mainGroups(t).map(g=>since(g)==null?999:since(g)));
+  // séances possibles : celles dont les groupes principaux sont reposés passent devant ;
+  // parmi elles, le full body d'abord, puis la séance ciblée la plus reposée. « Autre proposition » fait défiler la liste.
+  const ranked=[fullBody(since)].concat(log.length?TEMPLATES:[])
+    .map((t,i)=>({t,i,ok:!mainGroups(t).some(tired),r:rest(t)}))
+    .sort((a,b)=>(b.ok-a.ok)||(a.ok&&(a.t.id==="full")!==(b.t.id==="full")?(a.t.id==="full"?-1:1):0)||b.r-a.r||a.i-b.i);
+  const pick=ranked[shift%ranked.length], tpl=pick.t, allTired=!ranked.some(x=>x.ok);
+  const tiredMain=mainGroups(tpl).filter(tired).map(g=>gName[g].toLowerCase());
+  const tiredOther=Object.keys(lastDate).filter(g=>tired(g)&&!mainGroups(tpl).includes(g)).map(g=>gName[g].toLowerCase());
+  const reason=!log.length?"":allTired?"Tous tes groupes ont travaillé il y a moins de 48 h : repos ou cardio conseillé. Si tu y vas quand même, voici la séance la plus reposée."
+    :!pick.ok?"Attention : "+tiredMain.join(", ")+" "+(tiredMain.length>1?"ont":"a")+" travaillé il y a moins de 48 h."
+    :tpl.id==="full"?"Tes groupes principaux sont reposés : full body."
+    :"Séance "+tpl.name.toLowerCase()+" : "+mainGroups(tpl).map(g=>gName[g].toLowerCase()).join(" et ")+" reposés"+(tiredOther.length?", "+tiredOther.join(", ")+" encore en récupération":"")+".";
+  // habitudes sur 60 jours : fréquence de chaque exercice et matériel utilisé
+  const freq={}, recent={}, equipUsed={};
+  log.filter(dk=>dayDiff(k,dk)<=60).forEach(dk=>(state.days[dk].workout||[]).forEach(e=>{if((e.sets||[]).length){const n=norm(e.ex);freq[n]=(freq[n]||0)+1;if(!recent[n])recent[n]=dk;const q=equipOf(e.ex);if(q)equipUsed[q]=1}}));
   const items=[], used=new Set();
   // en full body, on alterne : un exercice fait à la dernière séance passe derrière tes autres habituels du même groupe
   const prevK=log.find(dk=>dk<k)||null;
   const lastEx=new Set(prevK?(state.days[prevK].workout||[]).filter(e=>(e.sets||[]).length).map(e=>norm(e.ex)):[]);
   const rank=n=>!freq[norm(n)]?2:(tpl.id==="full"&&lastEx.has(norm(n)))?1:0;
+  // jamais faits : les grands classiques d'abord, avec le matériel que tu utilises déjà
+  const classic=n=>{const i=CLASSICS.findIndex(c=>norm(c)===norm(n));return i<0?999:i};
   const candsFor=g=>fullCatalog().filter(c=>c[1]===g&&c[5]!=="wait").map(c=>c[0])
-    .sort((a,b)=>rank(a)-rank(b)||(freq[norm(b)]||0)-(freq[norm(a)]||0)||String(recent[norm(b)]||"").localeCompare(String(recent[norm(a)]||"")));
+    .sort((a,b)=>rank(a)-rank(b)||(freq[norm(b)]||0)-(freq[norm(a)]||0)||String(recent[norm(b)]||"").localeCompare(String(recent[norm(a)]||""))
+      ||(classic(a)<999?0:1)-(classic(b)<999?0:1)||(equipUsed[equipOf(a)]?0:1)-(equipUsed[equipOf(b)]?0:1)||classic(a)-classic(b));
   tpl.groups.forEach(([g,count])=>{
     candsFor(g).filter(n=>!used.has(norm(n))).slice(0,count).forEach(n=>{used.add(norm(n));items.push({ex:n,g,p:progression(n,k),seen:[norm(n)]})});
   });
-  const gName=Object.fromEntries(GROUPS);
+  // ordre de la séance : exercices de base d'abord, puis les autres, l'isolation et les abdos à la fin
+  items.sort((a,b)=>TYPE_ORDER[exType(a.ex)]-TYPE_ORDER[exType(b.ex)]);
   const lastK=log.find(dk=>dk<k)||log[0]||null;
   const lastGroups=lastK?[...new Set((state.days[lastK].workout||[]).filter(e=>(e.sets||[]).length).map(e=>groupOf(e.ex)).filter(Boolean))].map(g=>gName[g]):[];
   const recov=tpl.groups.map(([g])=>{const d=since(g);return gName[g]+" "+(d==null?"jamais travaillé":d===0?"travaillé aujourd'hui":"il y a "+d+" j")});
-  return {k,tpl,items,lastK,lastGroups,recov,first:!log.length,candsFor};
+  return {k,tpl,items,lastK,lastGroups,recov,reason,allTired,first:!log.length,candsFor};
 }
 function renderPlan(){
   const box=$("planBox");
@@ -546,6 +610,7 @@ function renderPlan(){
   if(plan.first)l1.textContent="Aucune séance de muscu enregistrée : un full body pour démarrer.";
   else{l1.textContent="Dernière séance ("+shortDate(plan.lastK)+") : ";const b=document.createElement("b");b.textContent=plan.lastGroups.join(", ")||"exercices non classés";l1.appendChild(b)}
   const l2=document.createElement("span");l2.textContent=plan.first?"":"Récupération : "+plan.recov.join(" · ");
+  if(plan.reason){const l0=document.createElement("span");l0.className="plan-why"+(plan.allTired?" warn":"");l0.textContent=plan.reason;ctx.append(l0)}
   ctx.append(l1);if(!plan.first)ctx.append(l2);
   const ul=document.createElement("ul");ul.className="plan-list";
   // après un clic, on redonne le focus au même bouton (sur la ligne qui a bougé) pour enchaîner au clavier
@@ -555,7 +620,7 @@ function renderPlan(){
     const li=document.createElement("li");
     const n=document.createElement("span");n.className="pn";n.textContent=it.ex+(inDay.has(norm(it.ex))?" ✓":"");
     const t=document.createElement("span");t.className="pt";t.textContent=planTxt(it.ex,it.p);
-    const w=document.createElement("span");w.className="pw";w.textContent=it.p.why;
+    const w=document.createElement("span");w.className="pw"+(it.p.stall?" warn":"");w.textContent=it.p.why;
     const acts=document.createElement("span");acts.className="pa";
     // monter / descendre : change l'ordre des exercices (repris tel quel par « Ajouter à la séance »)
     const up=btn("p-up","↑","Monter "+it.ex,"Monter",()=>{plan.items.splice(i-1,0,plan.items.splice(i,1)[0]);renderPlan();refocus(i-1,"p-up")});
@@ -582,7 +647,7 @@ function renderPlan(){
     (day(k).workout||[]).forEach(e=>folded.add(k+"|"+e.ex));
     todo.forEach((it,i)=>{if(i>0)folded.add(k+"|"+it.ex);else folded.delete(k+"|"+it.ex)});
     woCardOpen=true;
-    editDay(k,x=>{x.workout=x.workout||[];todo.forEach(it=>x.workout.push({ex:it.ex,sets:[],plan:{sets:it.p.sets,reps:it.p.reps,kg:it.p.kg}}));
+    editDay(k,x=>{x.workout=x.workout||[];todo.forEach(it=>x.workout.push({ex:it.ex,sets:[],plan:Object.assign({sets:it.p.sets,reps:it.p.reps,kg:it.p.kg},it.p.deload?{deload:true}:{})}));
       x.sports=x.sports||[];if(!x.sports.includes("muscu"))x.sports.push("muscu");x.rest=false});
     undo={k,before};
     $("toastTxt").textContent="Séance "+plan.tpl.name.toLowerCase()+" ajoutée";$("toast").hidden=false;
@@ -726,7 +791,7 @@ function renderHome(){
   // aperçu de la séance proposée
   const p=buildPlan(k,0), nb=$("nextBox");nb.innerHTML='<div class="plan-head"><b></b><span class="lbl"></span></div><p class="status"></p><p class="next-ex"></p>';
   nb.querySelector("b").textContent=p.tpl.name;nb.querySelector(".lbl").textContent=plural(p.items.length,"exercice","exercices");
-  nb.querySelector(".status").textContent=p.first?"Aucune séance de muscu notée : un full body pour démarrer.":"Dernière séance le "+shortDate(p.lastK)+(p.lastGroups.length?" ("+p.lastGroups.join(", ").toLowerCase()+")":"")+".";
+  nb.querySelector(".status").textContent=p.first?"Aucune séance de muscu notée : un full body pour démarrer.":p.reason||("Dernière séance le "+shortDate(p.lastK)+".");
   nb.querySelector(".next-ex").textContent=p.items.map(it=>it.ex).join(" · ");
 }
 $("tileSport").onclick=()=>{showView("seances");window.scrollTo({top:0})};

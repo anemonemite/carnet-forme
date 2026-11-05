@@ -324,3 +324,6 @@ select{height:40px;border-radius:9px;border:1px solid var(--line);background:var
 .next{display:flex;flex-direction:column;gap:6px}
 .next p{margin:0}
 .next-ex{font-size:14px}
+/* séance proposée : raison du choix et alertes (icône ⚠ + texte, pas la couleur seule) */
+.plan-ctx .plan-why{color:var(--fg);font-weight:500}
+.plan-ctx .plan-why.warn,.plan-list .pw.warn{color:var(--fg);font-weight:600}
