@@ -160,7 +160,7 @@ $("manualForm").addEventListener("submit",e=>{e.preventDefault();
 
 // ---------- interactions ----------
 $("quick").innerHTML="";
-QUICK.forEach(q=>{const b=document.createElement("button");b.className="qbtn";b.innerHTML="<span></span><span></span>";b.firstChild.textContent=q.name;b.lastChild.textContent="+"+q.g+" g · "+q.kcal+" kcal";
+QUICK.forEach(q=>{const b=document.createElement("button");b.className="qbtn";b.innerHTML="<span></span><span></span>";b.firstChild.textContent=q.name;b.lastChild.textContent="+"+fmt1(q.g)+" g · "+q.kcal+" kcal";b.title=q.p||"";b.setAttribute("aria-label","Ajouter "+q.name+(q.p?" ("+q.p+")":"")+" : "+fmt1(q.g)+" g de protéines, "+q.kcal+" kcal");
   b.onclick=()=>addMeal(q.name,q.kcal,q.g);$("quick").appendChild(b)});
 $("creaBtn").onclick=()=>editDay(state.sel,x=>{x.creatine=!x.creatine});
 $("prevDay").onclick=()=>{state.sel=keyOf(addDays(fromKey(state.sel),-1));syncMonth();render()};

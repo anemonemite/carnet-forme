@@ -7,7 +7,15 @@ export const SPORTS=[
   {id:"boxe",name:"Punch boxing",short:"Boxe"},
   {id:"autre",name:"Autre"}
 ];
-export const QUICK=[{name:"Shaker whey",g:25,kcal:113}];
+// ajouts rapides dans Nutrition : portions types (valeurs Ciqual / moyennes du commerce, arrondies)
+export const QUICK=[
+  {name:"Shaker whey",g:25,kcal:113,p:"1 dose de 30 g"},
+  {name:"Cuisse de poulet",g:31,kcal:245,p:"1 cuisse rôtie, environ 120 g de chair"},
+  {name:"1 œuf",g:6.3,kcal:70,p:"1 œuf moyen, environ 50 g"},
+  {name:"Chirashi saumon",g:25,kcal:500,p:"1 bol de restaurant, environ 300 g"},
+  {name:"Poulet frit",g:50,kcal:725,p:"grosse portion panée, environ 250 g"},
+  {name:"Jambon de poulet",g:6.8,kcal:35,p:"1 tranche"}
+];
 
 export const DEFAULT_EX=["Développé couché","Développé incliné","Squat","Soulevé de terre","Tractions","Développé militaire","Rowing barre","Tirage vertical","Curl biceps","Extension triceps poulie","Dips","Presse à cuisses","Fentes","Élévations latérales","Leg curl"];
 
