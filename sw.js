@@ -2,7 +2,7 @@
 // Les fichiers du site sont gardés en cache. Stratégie « cache d'abord, mise à jour en arrière-plan » :
 // l'app démarre instantanément, et une nouvelle version mise en ligne s'affiche à l'ouverture suivante.
 // Après une grosse modification, changer VERSION force le renouvellement complet du cache.
-const VERSION = "cf-v17";
+const VERSION = "cf-v18";
 const FILES = [
   "./", "manifest.webmanifest", "css/style.css",
   "js/app.js", "js/auth.js", "js/config.js", "js/data.js", "js/storage.js", "js/vendor/supabase.js",

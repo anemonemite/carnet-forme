@@ -710,10 +710,16 @@ function buildPlan(k,shift){
   const freq={}, recent={}, equipUsed={};
   log.filter(dk=>dayDiff(k,dk)<=60).forEach(dk=>(state.days[dk].workout||[]).forEach(e=>{if((e.sets||[]).length){const n=norm(e.ex);freq[n]=(freq[n]||0)+1;if(!recent[n])recent[n]=dk;const q=equipOf(e.ex);if(q)equipUsed[q]=1}}));
   const items=[], used=new Set();
-  // en full body, on alterne : un exercice fait à la dernière séance passe derrière tes autres habituels du même groupe
-  const prevK=log.find(dk=>dk<k)||null;
-  const lastEx=new Set(prevK?(state.days[prevK].workout||[]).filter(e=>(e.sets||[]).length).map(e=>norm(e.ex)):[]);
-  const rank=n=>!freq[norm(n)]?2:(tpl.id==="full"&&lastEx.has(norm(n)))?1:0;
+  // on alterne toujours : pour chaque groupe, les exercices de la dernière séance qui l'a travaillé passent en dernier
+  // (d'abord tes autres habituels, puis un classique jamais fait ; chaque exercice garde sa propre progression)
+  const lastOfGroup={};
+  log.forEach(dk=>(state.days[dk].workout||[]).forEach(e=>{
+    const g=(e.sets||[]).length&&groupOf(e.ex);if(!g)return;
+    if(!lastOfGroup[g])lastOfGroup[g]={k:dk,ex:new Set()}; // log va du plus récent au plus ancien
+    if(lastOfGroup[g].k===dk)lastOfGroup[g].ex.add(norm(e.ex));
+  }));
+  const doneLast=n=>{const g=groupOf(n);return !!(g&&lastOfGroup[g]&&lastOfGroup[g].ex.has(norm(n)))};
+  const rank=n=>doneLast(n)?3:!freq[norm(n)]?2:0;
   // jamais faits : les grands classiques d'abord, avec le matériel que tu utilises déjà
   const classic=n=>{const i=CLASSICS.findIndex(c=>norm(c)===norm(n));return i<0?999:i};
   const candsFor=g=>fullCatalog().filter(c=>c[1]===g&&c[5]!=="wait").map(c=>c[0])
