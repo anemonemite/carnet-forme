@@ -12,6 +12,7 @@ export const QUICK=[
   {name:"Shaker whey",g:25,kcal:113,p:"1 dose de 30 g"},
   {name:"Cuisse de poulet",g:31,kcal:245,p:"1 cuisse rôtie, environ 120 g de chair"},
   {name:"1 œuf",g:6.3,kcal:70,p:"1 œuf moyen, environ 50 g"},
+  {name:"Fromage blanc",g:12,kcal:135,p:"1 pot, environ 165 g (3 % MG)"},
   {name:"Chirashi saumon",g:25,kcal:500,p:"1 bol de restaurant, environ 300 g"},
   {name:"Poulet frit",g:50,kcal:725,p:"grosse portion panée, environ 250 g"},
   {name:"Jambon de poulet",g:6.8,kcal:35,p:"1 tranche"}
