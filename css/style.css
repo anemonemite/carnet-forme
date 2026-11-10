@@ -357,3 +357,4 @@ select{height:40px;border-radius:9px;border:1px solid var(--line);background:var
 .wo-time .t-in{height:34px;border-radius:8px;border:1px solid var(--accent);background:var(--surface);color:var(--fg);padding:0 6px;font:inherit}
 .wo-time .t-dur{font-family:var(--mono);color:var(--fg)}
 .wo-time .t-end{margin-left:auto;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:13px}
+.cat-acts{display:flex;flex-wrap:wrap;gap:4px 16px}

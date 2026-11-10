@@ -204,12 +204,12 @@ const best=sets=>Math.max(0,...sets.map(x=>+x.kg||0));
 // tonnage = somme charge × reps ; pour les tractions, la charge = poids de corps + lest
 // exercices au poids du corps : part du poids de corps comptée dans le tonnage (le champ kg sert alors au lest)
 const BW_SHARE=[[/traction|pull[- ]?up|chin[- ]?up/i,1],[/^\s*dips\s*$/i,1],[/pompe|push[- ]?up/i,0.65]];
-const bwShare=ex=>{const m=BW_SHARE.find(([r])=>r.test(ex||""));return m?m[1]:0};
+const bwShare=ex=>{const o=origOf(ex||""),m=BW_SHARE.find(([r])=>r.test(ex||"")||r.test(o));return m?m[1]:0}; // nom d'origine si renommé
 const isBW=ex=>bwShare(ex)>0;
 const effKg=(ex,kg)=>bwShare(ex)*(+state.settings.weight||0)+(+kg||0);
 // exercices faits bras par bras (haltères) : tonnage ×2 ; réglable par exercice
 const DEF_ARM=/halt[eè]re|dumbbell|unilat|curl(?!.*barre)/i;
-const perArm=ex=>{const o=(state.settings.perArm||{})[norm(ex)];return o===undefined?DEF_ARM.test(ex||""):!!o};
+const perArm=ex=>{const o=(state.settings.perArm||{})[norm(ex)];return o===undefined?DEF_ARM.test(ex||"")||DEF_ARM.test(origOf(ex||"")):!!o};
 const vol=(ex,sets)=>(sets||[]).reduce((s,x)=>s+effKg(ex,x.kg)*(+x.reps||0),0)*(perArm(ex)?2:1);
 const fmtKg=n=>Math.round(n).toLocaleString("fr-FR")+" kg";
 // une série en texte : 60×10, PDC×15 (sans charge), PDC+10×8 (lest), 45 s (gainage)
@@ -232,7 +232,7 @@ function allNames(){
   Object.values(state.days).forEach(x=>(x.workout||[]).forEach(e=>{if(e.ex)count[e.ex]=(count[e.ex]||0)+1}));
   const used=Object.keys(count).sort((a,b)=>count[b]-count[a]||a.localeCompare(b,"fr"));
   const seen=new Set(used.map(fold));
-  const rest=DEFAULT_EX.concat(fullCatalog().filter(c=>c[5]!=="wait").map(c=>c[0]));
+  const rest=DEFAULT_EX.map(shown).concat(fullCatalog().filter(c=>c[5]!=="wait").map(c=>c[0]));
   return used.concat(rest.filter(n=>!seen.has(fold(n))&&seen.add(fold(n))));
 }
 function addExercise(name){
@@ -526,13 +526,52 @@ function undoable(k,msg,fn){
 const cat={q:"",group:null,equip:null,open:new Set()};
 // ---------- exercices ajoutés depuis les séances : classés à la main (pas d'IA en phase 1) ----------
 const customEx=()=>Array.isArray(state.settings.customEx)?state.settings.customEx:[];
-const inCatalog=n=>CATALOG.some(c=>norm(c[0])===norm(n))||customEx().some(c=>norm(c.n)===norm(n));
+// exercices du catalogue renommés : réglage renamed = {nom d'origine en minuscules : nouveau nom}
+const renamedMap=()=>state.settings.renamed&&typeof state.settings.renamed==="object"?state.settings.renamed:{};
+const shown=n=>renamedMap()[norm(n)]||n; // nom affiché d'un exercice du catalogue
+// nom d'origine d'un exercice renommé (sert aux règles qui dépendent du nom : type, classiques, poids du corps…)
+const origOf=n=>{const r=renamedMap(),k=Object.keys(r).find(o=>norm(r[o])===norm(n));if(!k)return n;const c=CATALOG.find(c=>norm(c[0])===k);return c?c[0]:n};
+const inCatalog=n=>CATALOG.some(c=>norm(shown(c[0]))===norm(n))||customEx().some(c=>norm(c.n)===norm(n));
 const usedNames=()=>{const m=new Map();Object.values(state.days).forEach(x=>(x.workout||[]).forEach(e=>{if(e.ex&&!m.has(norm(e.ex)))m.set(norm(e.ex),e.ex)}));return [...m.values()]};
 const unclassified=()=>usedNames().filter(n=>!inCatalog(n));
 function fullCatalog(){
   const mine=customEx().map(c=>[c.n,c.g,c.e,c.m||"",c.c||[],"mine"]);
   const wait=unclassified().map(n=>[n,"autres",null,"Touche pour choisir son groupe et son matériel",[],"wait"]);
-  return CATALOG.concat(mine,wait);
+  return CATALOG.map(c=>[shown(c[0])].concat(c.slice(1))).concat(mine,wait);
+}
+// renommer un exercice : catalogue (réglage renamed), exercice perso, et tout l'historique des séances
+function renameExercise(old,nw){
+  const base=CATALOG.find(c=>norm(shown(c[0]))===norm(old));
+  if(base){const r=Object.assign({},renamedMap()),k=norm(base[0]);if(norm(nw)===k)delete r[k];else r[k]=nw;state.settings.renamed=r}
+  else if(customEx().some(c=>norm(c.n)===norm(old)))state.settings.customEx=customEx().map(c=>norm(c.n)===norm(old)?Object.assign({},c,{n:nw}):c);
+  const pa=Object.assign({},state.settings.perArm||{});
+  if(norm(old) in pa&&norm(old)!==norm(nw)){pa[norm(nw)]=pa[norm(old)];delete pa[norm(old)];state.settings.perArm=pa}
+  Object.keys(state.days).forEach(k=>{
+    const d=state.days[k];
+    if((d.workout||[]).some(e=>norm(e.ex)===norm(old))){d.workout=d.workout.map(e=>norm(e.ex)===norm(old)?Object.assign({},e,{ex:nw}):e);saveDay(k)}
+  });
+  if(cat.open.delete(old))cat.open.add(nw);
+  plan=null;saveSettings();render();
+}
+let renaming=null; // exercice dont le formulaire « Renommer » est ouvert
+function renameForm(n){
+  const f=document.createElement("form");f.className="classify";
+  f.innerHTML='<label class="full">Nouveau nom<input name="nm" type="text" maxlength="60" autocomplete="off" autocapitalize="sentences"></label>'+
+    '<p class="msg err full" hidden></p><div class="acts"><button class="addset" type="submit">Renommer</button><button class="ghost" type="button">Annuler</button></div>';
+  const inp=f.elements.nm, msg=f.querySelector(".msg");inp.value=n;
+  f.querySelector(".ghost").onclick=()=>{renaming=null;renderCatalog()};
+  f.addEventListener("submit",ev=>{ev.preventDefault();
+    const nw=inp.value.trim().replace(/ +/g," ");
+    if(!nw){msg.hidden=false;msg.textContent="Indique un nom.";return}
+    if(nw===n){renaming=null;renderCatalog();return}
+    // pas deux exercices du même nom (accents et majuscules ignorés), sauf pour changer la casse ou un accent du même exercice
+    if(fold(nw)!==fold(n)&&allNames().concat(fullCatalog().map(c=>c[0])).some(x=>fold(x)===fold(nw))){msg.hidden=false;msg.textContent="Un exercice porte déjà ce nom.";return}
+    renaming=null;document.activeElement&&document.activeElement.blur();
+    renameExercise(n,nw);
+    showUndo(n+" renommé en "+nw,()=>renameExercise(nw,n));
+  });
+  setTimeout(()=>{inp.focus();inp.select()},0);
+  return f;
 }
 let editing=null; // exercice perso dont le formulaire de classement est rouvert
 // enregistre (ou corrige) le groupe, le matériel et les muscles d'un exercice créé par l'utilisateur
@@ -599,8 +638,14 @@ function renderCatalog(){
     if(tags.children.length)it.appendChild(tags);
     if(open){
       const ul=document.createElement("ul");ul.className="cues";cues.forEach(c=>{const li=document.createElement("li");li.textContent=c;ul.appendChild(li)});it.appendChild(ul);
-      if(kind==="wait"||(kind==="mine"&&editing===n))it.appendChild(classifyForm(n,kind==="mine"?customEx().find(c=>norm(c.n)===norm(n)):null));
-      else if(kind==="mine"){const b=document.createElement("button");b.type="button";b.className="cat-act";b.textContent="Modifier le classement";b.onclick=()=>{editing=n;renderCatalog()};it.appendChild(b)}
+      if(renaming===n)it.appendChild(renameForm(n));
+      else{
+        if(kind==="wait"||(kind==="mine"&&editing===n))it.appendChild(classifyForm(n,kind==="mine"?customEx().find(c=>norm(c.n)===norm(n)):null));
+        const acts=document.createElement("div");acts.className="cat-acts";
+        if(kind==="mine"&&editing!==n){const b=document.createElement("button");b.type="button";b.className="cat-act";b.textContent="Modifier le classement";b.onclick=()=>{editing=n;renderCatalog()};acts.appendChild(b)}
+        const rn=document.createElement("button");rn.type="button";rn.className="cat-act";rn.textContent="Renommer";rn.onclick=()=>{renaming=n;editing=null;renderCatalog()};acts.appendChild(rn);
+        it.appendChild(acts);
+      }
       const ld=lastDone(n);const l=document.createElement("div");l.className="cat-last";l.textContent=ld?"Dernière fois : "+shortDate(ld):"Jamais fait pour l'instant";it.appendChild(l);
     }
     box.appendChild(it);
@@ -620,7 +665,7 @@ const mainGroups=t=>t.id==="full"?["jambes","pecs","dos","epaules"]:t.groups.fil
 const groupOf=n=>{const c=fullCatalog().find(c=>norm(c[0])===norm(n));return c?c[1]:null};
 const equipOf=n=>{const c=fullCatalog().find(c=>norm(c[0])===norm(n));return c?c[2]:null};
 const dayDiff=(a,b)=>Math.round((fromKey(a)-fromKey(b))/864e5);
-const isHold=ex=>/gainage|planche/i.test(ex||""); // exercice tenu : le champ reps contient des secondes
+const isHold=ex=>/gainage|planche/i.test(ex||"")||/gainage|planche/i.test(origOf(ex||"")); // exercice tenu : le champ reps contient des secondes
 const planTxt=(ex,p)=>p.sets+" × "+p.reps+(isHold(ex)?" s":"")+(p.kg==null?"":(isBW(ex)||!p.kg)?(p.kg>0?" · PDC+"+fmt1(p.kg)+" kg":isHold(ex)?"":" · PDC"):" · "+fmt1(p.kg)+" kg");
 let plan=null, planShift=0;
 
@@ -629,8 +674,8 @@ const inList=(list,n)=>list.some(x=>norm(x)===norm(n));
 function exType(ex){
   const g=groupOf(ex);
   if(g==="abdos")return "abdos";
-  if(inList(BASE_EX,ex))return "base";
-  if(inList(ISO_EX,ex)||["biceps","triceps","mollets"].includes(g))return "iso";
+  if(inList(BASE_EX,origOf(ex)))return "base";
+  if(inList(ISO_EX,origOf(ex))||["biceps","triceps","mollets"].includes(g))return "iso";
   return "autre";
 }
 const RANGES={base:[6,10],autre:[8,12],iso:[10,15],abdos:[12,20]};
@@ -721,7 +766,7 @@ function buildPlan(k,shift){
   const doneLast=n=>{const g=groupOf(n);return !!(g&&lastOfGroup[g]&&lastOfGroup[g].ex.has(norm(n)))};
   const rank=n=>doneLast(n)?3:!freq[norm(n)]?2:0;
   // jamais faits : les grands classiques d'abord, avec le matériel que tu utilises déjà
-  const classic=n=>{const i=CLASSICS.findIndex(c=>norm(c)===norm(n));return i<0?999:i};
+  const classic=n=>{const o=origOf(n),i=CLASSICS.findIndex(c=>norm(c)===norm(o));return i<0?999:i};
   const candsFor=g=>fullCatalog().filter(c=>c[1]===g&&c[5]!=="wait").map(c=>c[0])
     .sort((a,b)=>rank(a)-rank(b)||(freq[norm(b)]||0)-(freq[norm(a)]||0)||String(recent[norm(b)]||"").localeCompare(String(recent[norm(a)]||""))
       ||(classic(a)<999?0:1)-(classic(b)<999?0:1)||(equipUsed[equipOf(a)]?0:1)-(equipUsed[equipOf(b)]?0:1)||classic(a)-classic(b));
