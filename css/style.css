@@ -358,3 +358,22 @@ select{height:40px;border-radius:9px;border:1px solid var(--line);background:var
 .wo-time .t-dur{font-family:var(--mono);color:var(--fg)}
 .wo-time .t-end{margin-left:auto;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:13px}
 .cat-acts{display:flex;flex-wrap:wrap;gap:4px 16px}
+/* salles de sport : ligne « Salle » de la fiche Musculation et liste des Réglages */
+.gymrow{display:flex;align-items:center;gap:10px;min-width:0}
+.gymrow>.lbl{flex:none}
+.gymrow .gymchips{flex:1;min-width:0}
+.gymchips .chip{padding:7px 14px}
+.gymchips .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.gymchips .gym-add{border-style:dashed;color:var(--accent)}
+.gymadd{display:flex;gap:8px;align-items:center}
+.gymadd input,.gymadd select{flex:1;min-width:0;height:40px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--fg);padding:0 10px;font:inherit}
+.gymadd.inline{flex:1}
+.gymadd.inline input{height:36px}
+.gymadd button{flex:none}
+.gymlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.gymlist li{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
+.gymlist li:first-child{border-top:0}
+.gymlist li.empty{font-size:13px;color:var(--muted)}
+.gymlist .gname{font-weight:600;flex:1;min-width:0;overflow-wrap:anywhere}
+.gymlist .gcount{font-size:12px;color:var(--muted)}
+.gymlist li>form{flex:1}

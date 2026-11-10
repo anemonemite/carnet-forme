@@ -113,6 +113,21 @@
     <p class="hint">Repère courant pour un pratiquant régulier : 1,6 à 2,2 g de protéines par kg de poids de corps.</p>
 
     <div class="sect">
+      <h3>Mes salles</h3>
+      <p class="msg">Sur les machines et les poulies, les charges sont comparées salle par salle (dernière fois, progression, records).</p>
+      <ul class="gymlist" id="gymList"></ul>
+      <form class="gymadd" id="gymAddForm">
+        <input id="gymNew" type="text" maxlength="40" placeholder="Nom de la salle" aria-label="Nom de la salle à ajouter" autocomplete="off" autocapitalize="sentences">
+        <button type="submit" class="ghost">Ajouter</button>
+      </form>
+      <div class="confirm soft" id="gymPast" hidden>
+        <p id="gymPastTxt"></p>
+        <div class="gymadd"><select id="gymPastSel" aria-label="Salle des séances passées"></select><button type="button" class="primary" id="gymPastGo">Attribuer</button></div>
+      </div>
+      <p class="msg" id="gymMsg" role="status" hidden></p>
+    </div>
+
+    <div class="sect">
       <h3>Mes données</h3>
       <p class="msg">Sauvegarde toutes tes séances, repas et réglages dans un fichier, ou récupère une sauvegarde (y compris celle de l'ancien artefact).</p>
       <div class="btnrow">
@@ -198,6 +213,7 @@
   <section class="card" id="woCard" aria-labelledby="hW" hidden>
     <button type="button" class="card-toggle" id="woToggle" aria-expanded="true" aria-controls="woBody"><span class="chev" aria-hidden="true">›</span><h2 id="hW">Musculation</h2><span class="lbl" id="woCount"></span></button>
     <div id="woBody" class="wo-body">
+    <div class="gymrow" id="woGym"></div>
     <div class="restcfg">
       <span class="lbl">Repos</span>
       <div class="restchips" id="restChips">

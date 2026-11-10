@@ -102,6 +102,7 @@ function render(){
   renderPlan();
   renderCal();
   renderHome();
+  renderGymSettings();
 }
 
 function renderCal(){
@@ -214,9 +215,106 @@ const vol=(ex,sets)=>(sets||[]).reduce((s,x)=>s+effKg(ex,x.kg)*(+x.reps||0),0)*(
 const fmtKg=n=>Math.round(n).toLocaleString("fr-FR")+" kg";
 // une série en texte : 60×10, PDC×15 (sans charge), PDC+10×8 (lest), 45 s (gainage)
 const setTxt=(ex,x)=>isHold(ex)&&!(+x.kg)?x.reps+" s":(+x.kg>0?(isBW(ex)?"PDC+":"")+fmt1(x.kg):"PDC")+"×"+x.reps;
-function prevSessions(ex,k,n){
+// ---------- salles de sport ----------
+// machines et poulies : charges pas comparables d'une salle à l'autre, on ne compare qu'avec les séances de la même salle
+// (réglages gyms = liste des salles, lastGym = dernière utilisée ; chaque jour garde sa salle dans day.gym)
+const gyms=()=>Array.isArray(state.settings.gyms)?state.settings.gyms:[];
+const gymOf=k=>(state.days[k]&&state.days[k].gym)||null;
+const gymDep=ex=>gyms().length>0&&["machine","poulie"].includes(equipOf(ex));
+// salle de comparaison d'un exercice pour le jour k (null = toutes les salles)
+const cmpGym=(ex,k)=>gymDep(ex)?(gymOf(k)||state.settings.lastGym||null):null;
+// une séance de muscu qui commence prend la dernière salle utilisée
+function stampGym(x){const g=state.settings.lastGym;if(!x.gym&&g&&gyms().includes(g))x.gym=g}
+const gymMsg=(t,kind)=>{const m=$("gymMsg");m.hidden=!t;m.textContent=t||"";m.className="msg"+(kind?" "+kind:"")};
+// ajoute une salle (nom unique, accents et majuscules ignorés) ; renvoie le nom retenu ou null
+function addGym(name){
+  const n=String(name||"").trim().replace(/ +/g," ");if(!n)return null;
+  const same=gyms().find(g=>fold(g)===fold(n));if(same)return same;
+  state.settings.gyms=gyms().concat(n);saveSettings();return n;
+}
+// choisir la salle du jour (toucher la salle déjà choisie l'enlève) ; elle devient la salle par défaut
+function pickGym(k,g){
+  const cur=gymOf(k);
+  editDay(k,x=>{if(cur===g)delete x.gym;else x.gym=g});
+  if(cur!==g){state.settings.lastGym=g;saveSettings()}
+}
+// renommer une salle : liste, salle par défaut et toutes les séances
+function renameGym(old,nw){
+  state.settings.gyms=gyms().map(g=>g===old?nw:g);
+  if(state.settings.lastGym===old)state.settings.lastGym=nw;
+  Object.keys(state.days).forEach(k=>{if(state.days[k].gym===old){state.days[k].gym=nw;saveDay(k)}});
+  saveSettings();render();
+}
+let gymAdding=false, gymEditing=null;
+// ligne « Salle » de la fiche Musculation
+const typingIn=el=>{const a=document.activeElement;return !!(a&&el.contains(a)&&a.matches("input,select"))};
+function renderGymRow(){
+  const k=state.sel, el=$("woGym"), cur=gymOf(k);
+  if(typingIn(el))return; // ne pas effacer un nom de salle en cours de saisie
+  el.innerHTML='<span class="lbl">Salle</span><div class="chips hscroll gymchips"></div>';
+  const box=el.querySelector(".gymchips");
+  gyms().forEach(g=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=g;b.setAttribute("aria-pressed",cur===g);b.onclick=()=>pickGym(k,g);box.appendChild(b)});
+  if(gymAdding){
+    const f=document.createElement("form");f.className="gymadd inline";
+    f.innerHTML='<input type="text" maxlength="40" placeholder="Nom de la salle" aria-label="Nom de la nouvelle salle" autocomplete="off" autocapitalize="sentences"><button type="submit" class="addset">OK</button>';
+    const i=f.querySelector("input");
+    f.addEventListener("submit",e=>{e.preventDefault();const g=addGym(i.value);gymAdding=false;if(g){if(gymOf(k)!==g)pickGym(k,g);else render()}else renderGymRow()});
+    i.addEventListener("keydown",e=>{if(e.key==="Escape"){gymAdding=false;renderGymRow()}});
+    el.appendChild(f);setTimeout(()=>i.focus(),0);
+  }else{
+    const a=document.createElement("button");a.type="button";a.className="chip gym-add";a.textContent=gyms().length?"+ Salle":"+ Ajouter ta salle";
+    a.setAttribute("aria-label","Ajouter une salle");a.onclick=()=>{gymAdding=true;renderGymRow()};box.appendChild(a);
+  }
+}
+// section « Mes salles » des Réglages
+function renderGymSettings(){
+  if(typingIn($("gymList")))return;
+  const ul=$("gymList");ul.innerHTML="";
+  if(!gyms().length){const li=document.createElement("li");li.className="empty";li.textContent="Aucune salle pour l'instant.";ul.appendChild(li)}
+  gyms().forEach(g=>{
+    const li=document.createElement("li");
+    if(gymEditing===g){
+      const f=document.createElement("form");f.className="gymadd";
+      f.innerHTML='<input type="text" maxlength="40" aria-label="Nouveau nom de la salle"><button type="submit" class="ghost">OK</button>';
+      const i=f.querySelector("input");i.value=g;
+      f.addEventListener("submit",e=>{e.preventDefault();const n=i.value.trim().replace(/ +/g," ");
+        if(n&&n!==g&&gyms().some(x=>x!==g&&fold(x)===fold(n)))return gymMsg("Une salle porte déjà ce nom.","err");
+        gymEditing=null;gymMsg("");if(n&&n!==g)renameGym(g,n);else renderGymSettings()});
+      li.appendChild(f);setTimeout(()=>{i.focus();i.select()},0);
+    }else{
+      const nm=document.createElement("span");nm.className="gname";nm.textContent=g;
+      const used=Object.keys(state.days).filter(k=>state.days[k].gym===g).length;
+      const c=document.createElement("span");c.className="gcount";c.textContent=used?plural(used,"séance","séances"):"";
+      const rn=document.createElement("button");rn.type="button";rn.className="linkbtn";rn.textContent="Renommer";rn.onclick=()=>{gymEditing=g;renderGymSettings()};
+      const del=document.createElement("button");del.type="button";del.className="del";del.textContent="×";del.setAttribute("aria-label","Retirer "+g+" de la liste");
+      // retirer de la liste ; les séances gardent le nom de leur salle
+      del.onclick=()=>{const before=gyms().slice(),last=state.settings.lastGym;
+        state.settings.gyms=gyms().filter(x=>x!==g);if(last===g)state.settings.lastGym=null;saveSettings();render();
+        showUndo(g+" retirée de la liste",()=>{state.settings.gyms=before;state.settings.lastGym=last;saveSettings();render()})};
+      li.append(nm,c,rn,del);
+    }
+    ul.appendChild(li);
+  });
+  // séances de muscu passées sans salle : les attribuer en une fois
+  const past=Object.keys(state.days).filter(k=>!state.days[k].gym&&(state.days[k].workout||[]).some(e=>(e.sets||[]).length));
+  $("gymPast").hidden=!past.length||!gyms().length;
+  if(!$("gymPast").hidden){
+    $("gymPastTxt").textContent=past.length>1?past.length+" séances de musculation n'ont pas de salle. Elles étaient à :":"1 séance de musculation n'a pas de salle. Elle était à :";
+    const sel=$("gymPastSel"), keep=sel.value;sel.innerHTML="";gyms().forEach(g=>sel.add(new Option(g,g)));if(gyms().includes(keep))sel.value=keep;
+  }
+}
+$("gymAddForm").addEventListener("submit",e=>{e.preventDefault();const g=addGym($("gymNew").value);$("gymNew").value="";if(g){gymMsg("");render()}});
+$("gymPastGo").onclick=()=>{
+  const g=$("gymPastSel").value;if(!g)return;
+  const keys=Object.keys(state.days).filter(k=>!state.days[k].gym&&(state.days[k].workout||[]).some(e=>(e.sets||[]).length));
+  keys.forEach(k=>{state.days[k].gym=g;saveDay(k)});render();
+  gymMsg(plural(keys.length,"séance attribuée","séances attribuées")+" à "+g+".","ok");
+  showUndo(plural(keys.length,"séance attribuée","séances attribuées")+" à "+g,()=>{keys.forEach(k=>{delete state.days[k].gym;saveDay(k)});gymMsg("");render()});
+};
+// séances passées d'un exercice, les plus récentes d'abord (gym : seulement celles de cette salle)
+function prevSessions(ex,k,n,gym){
   const out=[];
-  Object.keys(state.days).filter(x=>x<k).sort().reverse().some(dk=>{
+  Object.keys(state.days).filter(x=>x<k&&(!gym||gymOf(x)===gym)).sort().reverse().some(dk=>{
     const w=(state.days[dk].workout||[]).find(e=>norm(e.ex)===norm(ex)&&(e.sets||[]).length);
     if(w)out.push({k:dk,sets:w.sets});
     return out.length>=n;
@@ -240,7 +338,7 @@ function addExercise(name){
   const known=allNames().find(v=>fold(v)===fold(name)); // même exercice malgré les accents ou majuscules
   name=known||name.charAt(0).toUpperCase()+name.slice(1);
   (day(state.sel).workout||[]).forEach(e=>folded.add(state.sel+"|"+e.ex));folded.delete(state.sel+"|"+name);woCardOpen=true;
-  editDay(state.sel,x=>{x.workout=x.workout||[];x.workout.push({ex:name,sets:[]});x.sports=x.sports||[];if(!x.sports.includes("muscu"))x.sports.push("muscu");x.rest=false});
+  editDay(state.sel,x=>{x.workout=x.workout||[];x.workout.push({ex:name,sets:[]});x.sports=x.sports||[];if(!x.sports.includes("muscu"))x.sports.push("muscu");x.rest=false;stampGym(x)});
   $("woName").value="";renderSugg();
 }
 function renderSugg(){
@@ -302,6 +400,7 @@ function renderWorkout(){
     $("woTotal").innerHTML='<span class="lbl">Tonnage de la séance</span><b>'+fmtKg(tot)+'</b>'+(pt?'<span class="cmp">séance précédente ('+shortDate(prevDay)+') : '+fmtKg(pt)+'</span>':'');
   }
   renderWoTime();
+  renderGymRow();
   $("woToggle").setAttribute("aria-expanded",woCardOpen);
   $("woBody").hidden=!woCardOpen;
   // « Tout replier » (ou « Tout déplier » si tout est déjà replié), affiché dès 2 exercices
@@ -310,7 +409,8 @@ function renderWorkout(){
   box.innerHTML="";
   if(!list.length){const p=document.createElement("p");p.className="empty";p.style.margin="0";p.textContent="Ajoute ton premier exercice : la charge et les reps de ta dernière séance s'afficheront automatiquement.";box.appendChild(p)}
   list.forEach((w,wi)=>{
-    const sets=w.sets||[], prev=prevSessions(w.ex,k,5), last=prev[0];
+    const g=cmpGym(w.ex,k), sets=w.sets||[], prev=prevSessions(w.ex,k,5,g), last=prev[0];
+    const elsewhere=g&&!last?prevSessions(w.ex,k,1)[0]:null; // jamais fait dans cette salle : la dernière fois ailleurs, pour info
     const id=k+"|"+w.ex, open=!folded.has(id);
     const ex=document.createElement("div");ex.className="ex";
     const head=document.createElement("div");head.className="ex-head";
@@ -345,7 +445,8 @@ function renderWorkout(){
     if(open){
       const body=document.createElement("div");body.className="ex-body";
       const info=document.createElement("div");info.className="last";
-      if(last){info.textContent="Dernière fois ("+shortDate(last.k)+") : ";const b=document.createElement("b");b.textContent=last.sets.map(x=>setTxt(w.ex,x)).join("  ");info.appendChild(b)}
+      if(last){info.textContent="Dernière fois ("+shortDate(last.k)+(g?", "+g:"")+") : ";const b=document.createElement("b");b.textContent=last.sets.map(x=>setTxt(w.ex,x)).join("  ");info.appendChild(b)}
+      else if(elsewhere){info.textContent="Nouveau à "+g+" · ailleurs ("+(gymOf(elsewhere.k)||"salle non notée")+", "+shortDate(elsewhere.k)+") : ";const b=document.createElement("b");b.textContent=elsewhere.sets.map(x=>setTxt(w.ex,x)).join("  ");info.appendChild(b)}
       else info.textContent="Premier enregistrement de cet exercice.";
       if(last&&sets.length){const diff=best(sets)-best(last.sets);if(diff>0){const u=document.createElement("span");u.className="up";u.textContent=" ↑ +"+fmt1(diff)+" kg";info.appendChild(u)}}
       body.appendChild(info);
@@ -382,7 +483,7 @@ function renderWorkout(){
         if(!(kg>=0)){f.querySelector("#kg-"+wi).focus();return}
         if(!(r>0)){f.querySelector("#rp-"+wi).focus();return}
         document.activeElement&&document.activeElement.blur();
-        editDay(k,x=>{x.workout[wi].sets=x.workout[wi].sets||[];x.workout[wi].sets.push({kg,reps:r,t:Date.now()}); // t : heure de la série
+        editDay(k,x=>{x.workout[wi].sets=x.workout[wi].sets||[];x.workout[wi].sets.push({kg,reps:r,t:Date.now()});stampGym(x); // t : heure de la série
           // une série notée après la fin enregistrée : la séance reprend (la fin redevient automatique)
           if(x.muscuTime&&x.muscuTime.end&&k===keyOf(new Date())&&toMin(x.muscuTime.end)<=toMin(hhmm(Date.now()))){delete x.muscuTime.end;if(!x.muscuTime.start)delete x.muscuTime}});
         startRest(restDur);
@@ -685,9 +786,9 @@ function sessionLog(k){
   return Object.keys(state.days).filter(x=>x<=k&&(state.days[x].workout||[]).some(e=>(e.sets||[]).length)).sort().reverse();
 }
 // dernières séances d'un exercice (la plus récente d'abord), avec l'objectif qui avait été proposé
-function exHistory(ex,k,n){
+function exHistory(ex,k,n,gym){
   const out=[];
-  Object.keys(state.days).filter(x=>x<k).sort().reverse().some(dk=>{
+  Object.keys(state.days).filter(x=>x<k&&(!gym||gymOf(x)===gym)).sort().reverse().some(dk=>{
     const w=(state.days[dk].workout||[]).find(e=>norm(e.ex)===norm(ex)&&(e.sets||[]).length);
     if(w)out.push({k:dk,sets:w.sets,plan:w.plan});
     return out.length>=n;
@@ -706,8 +807,12 @@ function stalled(h){
 }
 function progression(ex,k){
   const type=exType(ex), hold=isHold(ex), [lo,hi]=hold?[30,60]:RANGES[type], unit=hold?" s":" reps";
-  const h=exHistory(ex,k+"~",8), prev=h[0];
-  if(!prev)return {sets:3,reps:lo,kg:null,why:hold?"Nouveau : tiens "+lo+" à "+hi+" s par série.":"Nouveau : choisis une charge qui te permet "+lo+" à "+hi+" reps propres."};
+  const gym=cmpGym(ex,k), h=exHistory(ex,k+"~",8,gym), prev=h[0];
+  if(!prev){
+    const other=gym&&exHistory(ex,k+"~",1)[0]; // déjà fait, mais dans une autre salle
+    if(other)return {sets:3,reps:lo,kg:null,why:"Nouveau à "+gym+" : trouve ta charge pour "+lo+" à "+hi+" reps (ailleurs le "+shortDate(other.k)+" : "+other.sets.map(x=>setTxt(ex,x)).join(", ")+")."};
+    return {sets:3,reps:lo,kg:null,why:hold?"Nouveau : tiens "+lo+" à "+hi+" s par série.":"Nouveau : choisis une charge qui te permet "+lo+" à "+hi+" reps propres."};
+  }
   const s=prev.sets, top=best(s), topSets=s.filter(x=>(+x.kg||0)===top);
   const minR=Math.min(...topSets.map(x=>+x.reps||0)), n=Math.max(3,Math.min(4,s.length));
   const gap=dayDiff(k,prev.k), when=shortDate(prev.k), last=s.map(x=>setTxt(ex,x)).join(", ");
@@ -778,7 +883,8 @@ function buildPlan(k,shift){
   const lastK=log.find(dk=>dk<k)||log[0]||null;
   const lastGroups=lastK?[...new Set((state.days[lastK].workout||[]).filter(e=>(e.sets||[]).length).map(e=>groupOf(e.ex)).filter(Boolean))].map(g=>gName[g]):[];
   const recov=tpl.groups.map(([g])=>{const d=since(g);return gName[g]+" "+(d==null?"jamais travaillé":d===0?"travaillé aujourd'hui":"il y a "+d+" j")});
-  return {k,tpl,items,lastK,lastGroups,recov,reason,allTired,first:!log.length,candsFor};
+  const gym=gyms().length?gymOf(k)||state.settings.lastGym||null:null;
+  return {k,tpl,items,lastK,lastGroups,recov,reason,allTired,gym,first:!log.length,candsFor};
 }
 function renderPlan(){
   const box=$("planBox");
@@ -797,6 +903,7 @@ function renderPlan(){
   const l2=document.createElement("span");l2.textContent=plan.first?"":"Récupération : "+plan.recov.join(" · ");
   if(plan.reason){const l0=document.createElement("span");l0.className="plan-why"+(plan.allTired?" warn":"");l0.textContent=plan.reason;ctx.append(l0)}
   ctx.append(l1);if(!plan.first)ctx.append(l2);
+  if(plan.gym){const l3=document.createElement("span");l3.textContent="Salle : ";const b=document.createElement("b");b.textContent=plan.gym;l3.append(b," (charges des machines et poulies de cette salle)");ctx.append(l3)}
   const ul=document.createElement("ul");ul.className="plan-list";
   // après un clic, on redonne le focus au même bouton (sur la ligne qui a bougé) pour enchaîner au clavier
   const refocus=(i,cls)=>{const b=$("planBox").querySelectorAll(".plan-list li")[i];const x=b&&b.querySelector("."+cls+":not(:disabled)");x&&x.focus()};
@@ -832,7 +939,7 @@ function renderPlan(){
     (day(k).workout||[]).forEach(e=>folded.add(k+"|"+e.ex));
     todo.forEach((it,i)=>{if(i>0)folded.add(k+"|"+it.ex);else folded.delete(k+"|"+it.ex)});
     woCardOpen=true;
-    editDay(k,x=>{x.workout=x.workout||[];todo.forEach(it=>x.workout.push({ex:it.ex,sets:[],plan:Object.assign({sets:it.p.sets,reps:it.p.reps,kg:it.p.kg},it.p.deload?{deload:true}:{})}));
+    editDay(k,x=>{x.workout=x.workout||[];stampGym(x);todo.forEach(it=>x.workout.push({ex:it.ex,sets:[],plan:Object.assign({sets:it.p.sets,reps:it.p.reps,kg:it.p.kg},it.p.deload?{deload:true}:{})}));
       x.sports=x.sports||[];if(!x.sports.includes("muscu"))x.sports.push("muscu");x.rest=false});
     undo={k,before};
     $("toastTxt").textContent="Séance "+plan.tpl.name.toLowerCase()+" ajoutée";$("toast").hidden=false;
@@ -884,12 +991,13 @@ function recentPRs(){
   const since=keyOf(addDays(new Date(),-30)), top={}, out=[];
   Object.keys(state.days).sort().forEach(dk=>(state.days[dk].workout||[]).forEach(e=>{
     if(!(e.sets||[]).length)return;
-    const n=norm(e.ex), b=best(e.sets);
-    if(top[n]!==undefined&&b>top[n]&&dk>=since)out.push({ex:e.ex,k:dk,kg:b,gain:b-top[n]});
+    // machines et poulies : un record par salle
+    const gym=gymDep(e.ex)?gymOf(dk)||"":null, n=norm(e.ex)+(gym!==null?"|"+gym:""), b=best(e.sets);
+    if(top[n]!==undefined&&b>top[n]&&dk>=since)out.push({ex:e.ex,gym,key:n,k:dk,kg:b,gain:b-top[n]});
     if(top[n]===undefined||b>top[n])top[n]=b;
   }));
-  const seen=new Set(); // le plus récent record par exercice
-  return out.reverse().filter(r=>!seen.has(norm(r.ex))&&seen.add(norm(r.ex))).slice(0,4);
+  const seen=new Set(); // le plus récent record par exercice (et par salle)
+  return out.reverse().filter(r=>!seen.has(r.key)&&seen.add(r.key)).slice(0,4);
 }
 let tonPick=null; // semaine touchée dans le graphique (détail affiché dessous)
 function renderHome(){
@@ -967,7 +1075,7 @@ function renderHome(){
   if(!prs.length){const li=document.createElement("li");li.className="empty";li.textContent=maxV||Object.keys(state.days).length?"Pas de nouveau record ces 30 derniers jours. Ça viendra !":"Tes records en musculation s'afficheront ici.";ul.appendChild(li)}
   prs.forEach(r=>{
     const li=document.createElement("li");li.innerHTML='<span class="pr-ex"></span><span class="pr-kg"></span><span class="pr-d"></span>';
-    li.children[0].textContent="🏆 "+r.ex;
+    li.children[0].textContent="🏆 "+r.ex+(r.gym?" · "+r.gym:"");
     li.children[1].textContent=(isBW(r.ex)?"PDC+"+fmt1(r.kg):fmt1(r.kg))+" kg (+"+fmt1(r.gain)+")";
     li.children[2].textContent=shortDate(r.k);
     ul.appendChild(li);
