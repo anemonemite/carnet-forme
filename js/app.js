@@ -626,28 +626,14 @@ function startRest(sec){
   try{if(navigator.wakeLock&&!wlock)navigator.wakeLock.request("screen").then(l=>{wlock=l;l.addEventListener("release",()=>{wlock=null})}).catch(()=>{})}catch(e){}
   tick();tInt=setInterval(tick,250);
 }
-// vibration : Android avec navigator.vibrate ; iPhone (iOS 18+) n'a pas cette fonction, mais Safari donne un petit
-// retour haptique quand un interrupteur <input type="checkbox" switch> bascule : on en bascule un invisible
-let hapticLbl=null;
-function vibrate(times){
-  try{if(navigator.vibrate){navigator.vibrate(times>1?[200,100,200,100,200].slice(0,times*2-1):60);return}}catch(e){}
-  try{
-    if(!hapticLbl){
-      hapticLbl=document.createElement("label");hapticLbl.setAttribute("aria-hidden","true");
-      hapticLbl.style.cssText="position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none";
-      const i=document.createElement("input");i.type="checkbox";i.setAttribute("switch","");i.tabIndex=-1;hapticLbl.appendChild(i);document.body.appendChild(hapticLbl);
-    }
-    for(let n=0;n<times;n++)setTimeout(()=>hapticLbl.click(),n*180);
-  }catch(e){}
-}
 function tick(){
   const rem=Math.ceil((tEnd-Date.now())/1000);
   // compte à rebours sonore sur les 3 dernières secondes, le chiffre pulse en même temps
   if(rem>3)lastCue=null;
-  else if(rem>=1&&lastCue!==rem){lastCue=rem;beep("tick");vibrate(1);}
+  else if(rem>=1&&lastCue!==rem){lastCue=rem;beep("tick");try{navigator.vibrate&&navigator.vibrate(60)}catch(e){}}
   $("timer").classList.toggle("soon",rem>=1&&rem<=3);
   if(rem<=0){
-    clearInterval(tInt);tInt=null;beep("go");vibrate(3);
+    clearInterval(tInt);tInt=null;beep("go");try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}
     $("tTime").textContent="0:00";$("tLbl").textContent="C'est reparti !";$("tProg").style.width="0%";$("timer").classList.add("done");
     tHide=setTimeout(stopRest,8000);return;
   }
