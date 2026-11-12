@@ -201,7 +201,7 @@ $("undoBtn").onclick=()=>{
 const norm=x=>String(x||"").trim().toLowerCase();
 const shortDate=k=>fromKey(k).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"});
 const fmtSets=sets=>sets.map(x=>fmt1(x.kg)+" kg × "+x.reps).join(" · ");
-// séries d'échauffement (w:true) : affichées, mais exclues du tonnage, des records, de la progression et des comptes de séries
+// séries d'échauffement (w:true) : comptées dans le tonnage, mais exclues des records, de la progression et des comptes de séries
 const work=sets=>(sets||[]).filter(s=>!s.w);
 const best=sets=>Math.max(0,...work(sets).map(x=>+x.kg||0));
 // tonnage = somme charge × reps ; pour les tractions, la charge = poids de corps + lest
@@ -213,7 +213,7 @@ const effKg=(ex,kg)=>bwShare(ex)*(+state.settings.weight||0)+(+kg||0);
 // exercices faits bras par bras (haltères) : tonnage ×2 ; réglable par exercice
 const DEF_ARM=/halt[eè]re|dumbbell|unilat|curl(?!.*barre)/i;
 const perArm=ex=>{const o=(state.settings.perArm||{})[norm(ex)];return o===undefined?DEF_ARM.test(ex||"")||DEF_ARM.test(origOf(ex||"")):!!o};
-const vol=(ex,sets)=>work(sets).reduce((s,x)=>s+effKg(ex,x.kg)*(+x.reps||0),0)*(perArm(ex)?2:1);
+const vol=(ex,sets)=>(sets||[]).reduce((s,x)=>s+effKg(ex,x.kg)*(+x.reps||0),0)*(perArm(ex)?2:1);
 const fmtKg=n=>Math.round(n).toLocaleString("fr-FR")+" kg";
 // une série en texte : 60×10, PDC×15 (sans charge), PDC+10×8 (lest), 45 s (gainage)
 const setTxt=(ex,x)=>isHold(ex)&&!(+x.kg)?x.reps+" s":(+x.kg>0?(isBW(ex)?"PDC+":"")+fmt1(x.kg):"PDC")+"×"+x.reps;
@@ -318,7 +318,7 @@ function prevSessions(ex,k,n,gym){
   const out=[];
   Object.keys(state.days).filter(x=>x<k&&(!gym||gymOf(x)===gym)).sort().reverse().some(dk=>{
     const w=(state.days[dk].workout||[]).find(e=>norm(e.ex)===norm(ex)&&work(e.sets).length);
-    if(w)out.push({k:dk,sets:work(w.sets)});
+    if(w)out.push({k:dk,sets:work(w.sets),all:w.sets}); // sets : séries de travail, all : avec l'échauffement (tonnage)
     return out.length>=n;
   });
   return out;
@@ -427,7 +427,7 @@ function renderWorkout(){
     tg.innerHTML='<span class="chev" aria-hidden="true">›</span><span class="ex-name"></span><span class="ex-meta"></span>';
     tg.querySelector(".ex-name").textContent=w.ex;
     const wk=work(sets), nWarm=sets.length-wk.length; // séries de travail / d'échauffement
-    let meta=wk.length?wk.length+" série"+(wk.length>1?"s":"")+" · "+fmtKg(vol(w.ex,sets)):nWarm?"échauffement":"à faire";
+    let meta=wk.length?wk.length+" série"+(wk.length>1?"s":"")+" · "+fmtKg(vol(w.ex,sets)):nWarm?"échauffement · "+fmtKg(vol(w.ex,sets)):"à faire";
     if(last&&wk.length){const diff=best(sets)-best(last.sets);if(diff>0)meta+=" ↑";}
     tg.querySelector(".ex-meta").textContent=meta;
     tg.onclick=()=>{open?folded.add(id):folded.delete(id);renderWorkout()};
@@ -465,10 +465,10 @@ function renderWorkout(){
       if(goal){const g=document.createElement("div");g.className="ex-goal";g.textContent="Objectif : ";const b=document.createElement("b");b.textContent=planTxt(w.ex,goal);g.appendChild(b);
         if(calc&&calc.why)g.title=calc.why;
         if(wk.length)g.appendChild(document.createTextNode(" · "+wk.length+"/"+goal.sets+" séries"));body.appendChild(g)}
-      if(wk.length){
+      if(sets.length){
         const v=vol(w.ex,sets), vl=document.createElement("div");vl.className="last";
         vl.textContent="Total : ";const b=document.createElement("b");b.textContent=fmtKg(v);vl.appendChild(b);
-        if(last){const pv=vol(w.ex,last.sets);if(pv){const d=Math.round((v-pv)/pv*100);const c=document.createElement("span");c.className=d>0?"up":"";c.textContent=" ("+(d>0?"+":"")+d+" % vs dernière fois : "+fmtKg(pv)+")";vl.appendChild(c)}}
+        if(last){const pv=vol(w.ex,last.all||last.sets);if(pv){const d=Math.round((v-pv)/pv*100);const c=document.createElement("span");c.className=d>0?"up":"";c.textContent=" ("+(d>0?"+":"")+d+" % vs dernière fois : "+fmtKg(pv)+")";vl.appendChild(c)}}
         if(perArm(w.ex))vl.appendChild(document.createTextNode(" · ×2 (par bras)"));
         if(isBW(w.ex)){const sh=bwShare(w.ex);vl.appendChild(document.createTextNode(state.settings.weight?" · "+(sh<1?Math.round(sh*100)+" % du ":"")+"poids de corps ("+fmt1(state.settings.weight*sh)+" kg) inclus":" · renseigne ton poids dans les Réglages pour compter le poids de corps"))}
         body.appendChild(vl);
