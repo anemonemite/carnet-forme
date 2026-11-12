@@ -201,7 +201,9 @@ $("undoBtn").onclick=()=>{
 const norm=x=>String(x||"").trim().toLowerCase();
 const shortDate=k=>fromKey(k).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"});
 const fmtSets=sets=>sets.map(x=>fmt1(x.kg)+" kg × "+x.reps).join(" · ");
-const best=sets=>Math.max(0,...sets.map(x=>+x.kg||0));
+// séries d'échauffement (w:true) : affichées, mais exclues du tonnage, des records, de la progression et des comptes de séries
+const work=sets=>(sets||[]).filter(s=>!s.w);
+const best=sets=>Math.max(0,...work(sets).map(x=>+x.kg||0));
 // tonnage = somme charge × reps ; pour les tractions, la charge = poids de corps + lest
 // exercices au poids du corps : part du poids de corps comptée dans le tonnage (le champ kg sert alors au lest)
 const BW_SHARE=[[/traction|pull[- ]?up|chin[- ]?up/i,1],[/^\s*dips\s*$/i,1],[/pompe|push[- ]?up/i,0.65]];
@@ -211,7 +213,7 @@ const effKg=(ex,kg)=>bwShare(ex)*(+state.settings.weight||0)+(+kg||0);
 // exercices faits bras par bras (haltères) : tonnage ×2 ; réglable par exercice
 const DEF_ARM=/halt[eè]re|dumbbell|unilat|curl(?!.*barre)/i;
 const perArm=ex=>{const o=(state.settings.perArm||{})[norm(ex)];return o===undefined?DEF_ARM.test(ex||"")||DEF_ARM.test(origOf(ex||"")):!!o};
-const vol=(ex,sets)=>(sets||[]).reduce((s,x)=>s+effKg(ex,x.kg)*(+x.reps||0),0)*(perArm(ex)?2:1);
+const vol=(ex,sets)=>work(sets).reduce((s,x)=>s+effKg(ex,x.kg)*(+x.reps||0),0)*(perArm(ex)?2:1);
 const fmtKg=n=>Math.round(n).toLocaleString("fr-FR")+" kg";
 // une série en texte : 60×10, PDC×15 (sans charge), PDC+10×8 (lest), 45 s (gainage)
 const setTxt=(ex,x)=>isHold(ex)&&!(+x.kg)?x.reps+" s":(+x.kg>0?(isBW(ex)?"PDC+":"")+fmt1(x.kg):"PDC")+"×"+x.reps;
@@ -315,8 +317,8 @@ $("gymPastGo").onclick=()=>{
 function prevSessions(ex,k,n,gym){
   const out=[];
   Object.keys(state.days).filter(x=>x<k&&(!gym||gymOf(x)===gym)).sort().reverse().some(dk=>{
-    const w=(state.days[dk].workout||[]).find(e=>norm(e.ex)===norm(ex)&&(e.sets||[]).length);
-    if(w)out.push({k:dk,sets:w.sets});
+    const w=(state.days[dk].workout||[]).find(e=>norm(e.ex)===norm(ex)&&work(e.sets).length);
+    if(w)out.push({k:dk,sets:work(w.sets)});
     return out.length>=n;
   });
   return out;
@@ -360,6 +362,7 @@ function renderSugg(){
 }
 $("woName").addEventListener("input",renderSugg);
 const folded=new Set(); let woCardOpen=true, lastAdded=null;
+const warmOn=new Set(); // exercices (jour|nom) dont l'interrupteur « séries d'échauffement » est activé
 // ↻ dans la séance : exercice suivant du même groupe (mêmes critères que la séance proposée : tes habitudes, puis les classiques),
 // sans doublon dans la séance ; on fait défiler les choix, puis on repart du début
 let swapAsk=null, swapCands=null; const swapSeen={};
@@ -390,7 +393,7 @@ function renderWorkout(){
   if(box.contains(document.activeElement)&&document.activeElement.tagName==="INPUT"){woDirty=true;return}
   woDirty=false;swapCands=null;
   renderSugg();
-  const nSets=list.reduce((s,e)=>s+(e.sets||[]).length,0);
+  const nSets=list.reduce((s,e)=>s+work(e.sets).length,0);
   const tot=list.reduce((s,e)=>s+vol(e.ex,e.sets),0);
   $("woCount").textContent=list.length?list.length+" exo"+(list.length>1?"s":"")+" · "+nSets+" série"+(nSets>1?"s":"")+(tot?" · "+fmtKg(tot):""):"";
   $("woTotal").hidden=!tot;
@@ -407,7 +410,13 @@ function renderWorkout(){
   const allFolded=list.length>0&&list.every(w=>folded.has(k+"|"+w.ex));
   $("foldAll").hidden=list.length<2;$("foldAll").textContent=allFolded?"Tout déplier":"Tout replier";
   box.innerHTML="";
-  if(!list.length){const p=document.createElement("p");p.className="empty";p.style.margin="0";p.textContent="Ajoute ton premier exercice : la charge et les reps de ta dernière séance s'afficheront automatiquement.";box.appendChild(p)}
+  if(!list.length){
+    const p=document.createElement("p");p.className="empty";p.style.margin="0";p.textContent="Ajoute ton premier exercice ci-dessous, ou laisse l'app te proposer une séance avec les charges à viser.";box.appendChild(p);
+    // raccourci vers la séance proposée (onglet Exercices), qui revient ici avec « Ajouter à la séance »
+    const b=document.createElement("button");b.type="button";b.className="primary wo-plan";b.textContent="Proposer une séance";
+    b.onclick=()=>{showView("exercices");planShift=0;plan=buildPlan(state.sel,0);renderPlan();window.scrollTo({top:0})};
+    box.appendChild(b);
+  }
   list.forEach((w,wi)=>{
     const g=cmpGym(w.ex,k), sets=w.sets||[], prev=prevSessions(w.ex,k,5,g), last=prev[0];
     const elsewhere=g&&!last?prevSessions(w.ex,k,1)[0]:null; // jamais fait dans cette salle : la dernière fois ailleurs, pour info
@@ -417,8 +426,9 @@ function renderWorkout(){
     const tg=document.createElement("button");tg.type="button";tg.className="ex-toggle";tg.setAttribute("aria-expanded",open);
     tg.innerHTML='<span class="chev" aria-hidden="true">›</span><span class="ex-name"></span><span class="ex-meta"></span>';
     tg.querySelector(".ex-name").textContent=w.ex;
-    let meta=sets.length?sets.length+" série"+(sets.length>1?"s":"")+" · "+fmtKg(vol(w.ex,sets)):"à faire";
-    if(last&&sets.length){const diff=best(sets)-best(last.sets);if(diff>0)meta+=" ↑";}
+    const wk=work(sets), nWarm=sets.length-wk.length; // séries de travail / d'échauffement
+    let meta=wk.length?wk.length+" série"+(wk.length>1?"s":"")+" · "+fmtKg(vol(w.ex,sets)):nWarm?"échauffement":"à faire";
+    if(last&&wk.length){const diff=best(sets)-best(last.sets);if(diff>0)meta+=" ↑";}
     tg.querySelector(".ex-meta").textContent=meta;
     tg.onclick=()=>{open?folded.add(id):folded.delete(id);renderWorkout()};
     const del=document.createElement("button");del.className="del";del.setAttribute("aria-label","Supprimer l'exercice "+w.ex);del.textContent="×";
@@ -448,11 +458,14 @@ function renderWorkout(){
       if(last){info.textContent="Dernière fois ("+shortDate(last.k)+(g?", "+g:"")+") : ";const b=document.createElement("b");b.textContent=last.sets.map(x=>setTxt(w.ex,x)).join("  ");info.appendChild(b)}
       else if(elsewhere){info.textContent="Nouveau à "+g+" · ailleurs ("+(gymOf(elsewhere.k)||"salle non notée")+", "+shortDate(elsewhere.k)+") : ";const b=document.createElement("b");b.textContent=elsewhere.sets.map(x=>setTxt(w.ex,x)).join("  ");info.appendChild(b)}
       else info.textContent="Premier enregistrement de cet exercice.";
-      if(last&&sets.length){const diff=best(sets)-best(last.sets);if(diff>0){const u=document.createElement("span");u.className="up";u.textContent=" ↑ +"+fmt1(diff)+" kg";info.appendChild(u)}}
+      if(last&&wk.length){const diff=best(sets)-best(last.sets);if(diff>0){const u=document.createElement("span");u.className="up";u.textContent=" ↑ +"+fmt1(diff)+" kg";info.appendChild(u)}}
       body.appendChild(info);
-      if(w.plan){const g=document.createElement("div");g.className="ex-goal";g.textContent="Objectif : ";const b=document.createElement("b");b.textContent=planTxt(w.ex,w.plan);g.appendChild(b);
-        if(sets.length)g.appendChild(document.createTextNode(" · "+sets.length+"/"+w.plan.sets+" séries"));body.appendChild(g)}
-      if(sets.length){
+      // objectif : celui enregistré (séance proposée, ou fixé à la 1re série), sinon calculé tant qu'aucune série de travail n'est notée
+      const calc=!w.plan&&!wk.length?progression(w.ex,k):null, goal=w.plan||calc;
+      if(goal){const g=document.createElement("div");g.className="ex-goal";g.textContent="Objectif : ";const b=document.createElement("b");b.textContent=planTxt(w.ex,goal);g.appendChild(b);
+        if(calc&&calc.why)g.title=calc.why;
+        if(wk.length)g.appendChild(document.createTextNode(" · "+wk.length+"/"+goal.sets+" séries"));body.appendChild(g)}
+      if(wk.length){
         const v=vol(w.ex,sets), vl=document.createElement("div");vl.className="last";
         vl.textContent="Total : ";const b=document.createElement("b");b.textContent=fmtKg(v);vl.appendChild(b);
         if(last){const pv=vol(w.ex,last.sets);if(pv){const d=Math.round((v-pv)/pv*100);const c=document.createElement("span");c.className=d>0?"up":"";c.textContent=" ("+(d>0?"+":"")+d+" % vs dernière fois : "+fmtKg(pv)+")";vl.appendChild(c)}}
@@ -463,18 +476,25 @@ function renderWorkout(){
       if(sets.length){
         const row=document.createElement("div");row.className="setchips";
         sets.forEach((st,si)=>{
-          const c=document.createElement("span");c.className="setchip";
-          const t=document.createElement("span");t.textContent=setTxt(w.ex,st);
-          const b=document.createElement("button");b.setAttribute("aria-label","Supprimer la série "+(si+1));b.textContent="×";
+          const c=document.createElement("span");c.className="setchip"+(st.w?" warm":"");
+          // toucher la série la passe en échauffement (ou l'inverse)
+          const t=document.createElement("button");t.type="button";t.className="st";t.textContent=setTxt(w.ex,st);
+          if(st.w){const tag=document.createElement("span");tag.className="wtag";tag.textContent="échauff.";t.prepend(tag)}
+          t.setAttribute("aria-label","Série "+(si+1)+" : "+setTxt(w.ex,st)+(st.w?", échauffement. Toucher pour en faire une série de travail":". Toucher pour la marquer en échauffement"));
+          t.onclick=()=>undoable(k,"Série "+(si+1)+(st.w?" : série de travail":" : échauffement"),x=>{const s=x.workout[wi].sets[si];if(s.w)delete s.w;else s.w=true});
+          const b=document.createElement("button");b.type="button";b.className="sdel";b.setAttribute("aria-label","Supprimer la série "+(si+1));b.textContent="×";
           b.onclick=()=>undoable(k,"Série "+(si+1)+" retirée",x=>x.workout[wi].sets.splice(si,1));
           c.append(t,b);row.appendChild(c);
         });
         body.appendChild(row);
       }
-      const ref=sets.length?sets[sets.length-1]:(w.plan&&w.plan.kg!=null?{kg:w.plan.kg,reps:w.plan.reps}:(last?last.sets[last.sets.length-1]:null));
+      // préremplissage : dernière série de travail du jour, sinon l'objectif, sinon la dernière série de la fois précédente
+      const warm=warmOn.has(id), warms=sets.filter(s=>s.w);
+      // (en mode échauffement : la dernière série de chauffe du jour)
+      const ref=warm&&warms.length?warms[warms.length-1]:wk.length?wk[wk.length-1]:(goal&&goal.kg!=null?{kg:goal.kg,reps:goal.reps}:(last?last.sets[last.sets.length-1]:null));
       const pdc=isBW(w.ex)||equipOf(w.ex)==="pdc"; // exercice au poids du corps : le champ kg sert au lest
       const f=document.createElement("form");f.className="setform";
-      f.innerHTML='<input id="kg-'+wi+'" type="number" inputmode="decimal" min="0" step="0.5" placeholder="'+(pdc?"lest":"kg")+'" aria-label="'+(pdc?"Lest en kg, laisser vide pour le poids du corps":"Charge en kg")+'"><span class="x" aria-hidden="true">kg ×</span><input id="rp-'+wi+'" type="number" inputmode="numeric" min="1" step="1" placeholder="reps" aria-label="Répétitions"><button class="addset" type="submit">+ Série</button>';
+      f.innerHTML='<input id="kg-'+wi+'" type="number" inputmode="decimal" min="0" step="0.5" placeholder="'+(pdc?"lest":"kg")+'" aria-label="'+(pdc?"Lest en kg, laisser vide pour le poids du corps":"Charge en kg")+'"><span class="x" aria-hidden="true">kg ×</span><input id="rp-'+wi+'" type="number" inputmode="numeric" min="1" step="1" placeholder="reps" aria-label="Répétitions"><button class="addset'+(warm?" warm":"")+'" type="submit">'+(warm?"+ Échauff.":"+ Série")+'</button>';
       if(ref){f.querySelector("#kg-"+wi).value=pdc&&!(+ref.kg)?"":ref.kg;f.querySelector("#rp-"+wi).value=ref.reps}
       f.addEventListener("submit",e=>{e.preventDefault();
         let kg=parseFloat(String(f.querySelector("#kg-"+wi).value).replace(",",".")), r=parseInt(f.querySelector("#rp-"+wi).value,10);
@@ -483,12 +503,20 @@ function renderWorkout(){
         if(!(kg>=0)){f.querySelector("#kg-"+wi).focus();return}
         if(!(r>0)){f.querySelector("#rp-"+wi).focus();return}
         document.activeElement&&document.activeElement.blur();
-        editDay(k,x=>{x.workout[wi].sets=x.workout[wi].sets||[];x.workout[wi].sets.push({kg,reps:r,t:Date.now()});stampGym(x); // t : heure de la série
+        editDay(k,x=>{const it=x.workout[wi];it.sets=it.sets||[];
+          // 1re série de travail sans objectif enregistré : on fige l'objectif calculé (il ne bouge plus pendant la séance)
+          if(!warm&&!it.plan&&!work(it.sets).length){const p=progression(it.ex,k);it.plan=Object.assign({sets:p.sets,reps:p.reps,kg:p.kg},p.deload?{deload:true}:{})}
+          it.sets.push(Object.assign({kg,reps:r,t:Date.now()},warm?{w:true}:{}));stampGym(x); // t : heure de la série, w : échauffement
           // une série notée après la fin enregistrée : la séance reprend (la fin redevient automatique)
           if(x.muscuTime&&x.muscuTime.end&&k===keyOf(new Date())&&toMin(x.muscuTime.end)<=toMin(hhmm(Date.now()))){delete x.muscuTime.end;if(!x.muscuTime.start)delete x.muscuTime}});
         startRest(restDur);
       });
       body.appendChild(f);
+      // interrupteur « séries d'échauffement » : reste activé pour enchaîner plusieurs séries de chauffe
+      const wt=document.createElement("button");wt.type="button";wt.className="armtoggle";wt.setAttribute("aria-pressed",warm);
+      wt.innerHTML='<span class="sw" aria-hidden="true"></span>Séries d\'échauffement';wt.title="Hors tonnage, records et progression";
+      wt.onclick=()=>{warm?warmOn.delete(id):warmOn.add(id);renderWorkout();const b=$("woList").querySelectorAll(".ex")[wi];const s=b&&b.querySelector(".addset");s&&s.focus()};
+      body.appendChild(wt);
       const arm=document.createElement("button");arm.type="button";arm.className="armtoggle";arm.setAttribute("aria-pressed",perArm(w.ex));
       arm.innerHTML='<span class="sw" aria-hidden="true"></span>Charge et reps par bras (tonnage ×2)';
       arm.onclick=()=>{const m=Object.assign({},state.settings.perArm||{});m[norm(w.ex)]=!perArm(w.ex);state.settings.perArm=m;saveSettings();renderWorkout()};
@@ -789,8 +817,8 @@ function sessionLog(k){
 function exHistory(ex,k,n,gym){
   const out=[];
   Object.keys(state.days).filter(x=>x<k&&(!gym||gymOf(x)===gym)).sort().reverse().some(dk=>{
-    const w=(state.days[dk].workout||[]).find(e=>norm(e.ex)===norm(ex)&&(e.sets||[]).length);
-    if(w)out.push({k:dk,sets:w.sets,plan:w.plan});
+    const w=(state.days[dk].workout||[]).find(e=>norm(e.ex)===norm(ex)&&work(e.sets).length);
+    if(w)out.push({k:dk,sets:work(w.sets),plan:w.plan});
     return out.length>=n;
   });
   return out;
@@ -1005,7 +1033,7 @@ function renderHome(){
   $("hToday").textContent=k===todayK?"Aujourd'hui":fromKey(k).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
 
   // tuiles du jour
-  const sp=d.sports||[], nSets=(d.workout||[]).reduce((s,e)=>s+(e.sets||[]).length,0);
+  const sp=d.sports||[], nSets=(d.workout||[]).reduce((s,e)=>s+work(e.sets).length,0);
   let dots=null;
   if(sp.length){dots=document.createElement("span");dots.className="dots";sp.forEach(s=>{const i=document.createElement("i");i.style.setProperty("--c","var(--"+s+")");dots.appendChild(i)})}
   fillTile($("tileSport"),"Séance",sp.length?sp.map(sportShort).join(" + "):d.rest?"Repos":"—",

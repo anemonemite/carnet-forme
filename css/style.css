@@ -377,3 +377,11 @@ select{height:40px;border-radius:9px;border:1px solid var(--line);background:var
 .gymlist .gname{font-weight:600;flex:1;min-width:0;overflow-wrap:anywhere}
 .gymlist .gcount{font-size:12px;color:var(--muted)}
 .gymlist li>form{flex:1}
+/* séries : toucher le texte bascule échauffement / travail ; l'échauffement est en pointillés, avec une étiquette */
+.setchip .st{width:auto;height:auto;padding:0 2px;font:inherit;font-family:var(--mono);font-size:13px;color:var(--fg);display:inline-flex;align-items:center;gap:4px}
+.setchip.warm{border-style:dashed;background:var(--bg)}
+.setchip.warm .st{color:var(--muted)}
+.setchip .wtag{font-family:var(--body);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--cyclisme)}
+.addset.warm{border-style:dashed}
+.wo-plan{align-self:flex-start}
+.armtoggle{text-align:left}
