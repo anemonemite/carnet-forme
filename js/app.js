@@ -362,7 +362,7 @@ function renderSugg(){
 }
 $("woName").addEventListener("input",renderSugg);
 const folded=new Set(); let woCardOpen=true, lastAdded=null;
-const warmOn=new Set(); // exercices (jour|nom) dont l'interrupteur « séries d'échauffement » est activé
+const setMode=new Map(); // type choisi pour la prochaine série de chaque exercice (jour|nom → "w" échauffement, "d" dégressive)
 // ↻ dans la séance : exercice suivant du même groupe (mêmes critères que la séance proposée : tes habitudes, puis les classiques),
 // sans doublon dans la séance ; on fait défiler les choix, puis on repart du début
 let swapAsk=null, swapCands=null; const swapSeen={};
@@ -476,12 +476,14 @@ function renderWorkout(){
       if(sets.length){
         const row=document.createElement("div");row.className="setchips";
         sets.forEach((st,si)=>{
-          const c=document.createElement("span");c.className="setchip"+(st.w?" warm":"");
-          // toucher la série la passe en échauffement (ou l'inverse)
+          const kind=st.w?"warm":st.d?"drop":""; // w : échauffement, d : dégressive (simple étiquette)
+          const c=document.createElement("span");c.className="setchip"+(kind?" "+kind:"");
+          // toucher la série fait défiler son type : travail → échauffement → dégressive → travail
           const t=document.createElement("button");t.type="button";t.className="st";t.textContent=setTxt(w.ex,st);
-          if(st.w){const tag=document.createElement("span");tag.className="wtag";tag.textContent="échauff.";t.prepend(tag)}
-          t.setAttribute("aria-label","Série "+(si+1)+" : "+setTxt(w.ex,st)+(st.w?", échauffement. Toucher pour en faire une série de travail":". Toucher pour la marquer en échauffement"));
-          t.onclick=()=>undoable(k,"Série "+(si+1)+(st.w?" : série de travail":" : échauffement"),x=>{const s=x.workout[wi].sets[si];if(s.w)delete s.w;else s.w=true});
+          if(kind){const tag=document.createElement("span");tag.className="wtag";tag.textContent=st.w?"échauff.":"dégressive";t.prepend(tag)}
+          const nextLbl=st.w?"dégressive":st.d?"série de travail":"échauffement";
+          t.setAttribute("aria-label","Série "+(si+1)+" : "+setTxt(w.ex,st)+(st.w?", échauffement":st.d?", dégressive":"")+". Toucher pour la passer en "+nextLbl);
+          t.onclick=()=>undoable(k,"Série "+(si+1)+" : "+nextLbl,x=>{const s=x.workout[wi].sets[si];if(s.w){delete s.w;s.d=true}else if(s.d)delete s.d;else s.w=true});
           const b=document.createElement("button");b.type="button";b.className="sdel";b.setAttribute("aria-label","Supprimer la série "+(si+1));b.textContent="×";
           b.onclick=()=>undoable(k,"Série "+(si+1)+" retirée",x=>x.workout[wi].sets.splice(si,1));
           c.append(t,b);row.appendChild(c);
@@ -489,12 +491,12 @@ function renderWorkout(){
         body.appendChild(row);
       }
       // préremplissage : dernière série de travail du jour, sinon l'objectif, sinon la dernière série de la fois précédente
-      const warm=warmOn.has(id), warms=sets.filter(s=>s.w);
+      const mode=setMode.get(id)||"", warm=mode==="w", drop=mode==="d", warms=sets.filter(s=>s.w);
       // (en mode échauffement : la dernière série de chauffe du jour)
       const ref=warm&&warms.length?warms[warms.length-1]:wk.length?wk[wk.length-1]:(goal&&goal.kg!=null?{kg:goal.kg,reps:goal.reps}:(last?last.sets[last.sets.length-1]:null));
       const pdc=isBW(w.ex)||equipOf(w.ex)==="pdc"; // exercice au poids du corps : le champ kg sert au lest
       const f=document.createElement("form");f.className="setform";
-      f.innerHTML='<input id="kg-'+wi+'" type="number" inputmode="decimal" min="0" step="0.5" placeholder="'+(pdc?"lest":"kg")+'" aria-label="'+(pdc?"Lest en kg, laisser vide pour le poids du corps":"Charge en kg")+'"><span class="x" aria-hidden="true">kg ×</span><input id="rp-'+wi+'" type="number" inputmode="numeric" min="1" step="1" placeholder="reps" aria-label="Répétitions"><button class="addset'+(warm?" warm":"")+'" type="submit">'+(warm?"+ Échauff.":"+ Série")+'</button>';
+      f.innerHTML='<input id="kg-'+wi+'" type="number" inputmode="decimal" min="0" step="0.5" placeholder="'+(pdc?"lest":"kg")+'" aria-label="'+(pdc?"Lest en kg, laisser vide pour le poids du corps":"Charge en kg")+'"><span class="x" aria-hidden="true">kg ×</span><input id="rp-'+wi+'" type="number" inputmode="numeric" min="1" step="1" placeholder="reps" aria-label="Répétitions"><button class="addset'+(warm?" warm":drop?" drop":"")+'" type="submit">'+(warm?"+ Échauff.":drop?"+ Dégressive":"+ Série")+'</button>';
       if(ref){f.querySelector("#kg-"+wi).value=pdc&&!(+ref.kg)?"":ref.kg;f.querySelector("#rp-"+wi).value=ref.reps}
       f.addEventListener("submit",e=>{e.preventDefault();
         let kg=parseFloat(String(f.querySelector("#kg-"+wi).value).replace(",",".")), r=parseInt(f.querySelector("#rp-"+wi).value,10);
@@ -506,17 +508,21 @@ function renderWorkout(){
         editDay(k,x=>{const it=x.workout[wi];it.sets=it.sets||[];
           // 1re série de travail sans objectif enregistré : on fige l'objectif calculé (il ne bouge plus pendant la séance)
           if(!warm&&!it.plan&&!work(it.sets).length){const p=progression(it.ex,k);it.plan=Object.assign({sets:p.sets,reps:p.reps,kg:p.kg},p.deload?{deload:true}:{})}
-          it.sets.push(Object.assign({kg,reps:r,t:Date.now()},warm?{w:true}:{}));stampGym(x); // t : heure de la série, w : échauffement
+          it.sets.push(Object.assign({kg,reps:r,t:Date.now()},warm?{w:true}:drop?{d:true}:{}));stampGym(x); // t : heure de la série, w : échauffement, d : dégressive
           // une série notée après la fin enregistrée : la séance reprend (la fin redevient automatique)
           if(x.muscuTime&&x.muscuTime.end&&k===keyOf(new Date())&&toMin(x.muscuTime.end)<=toMin(hhmm(Date.now()))){delete x.muscuTime.end;if(!x.muscuTime.start)delete x.muscuTime}});
-        startRest(restDur);
+        if(!drop)startRest(restDur); // une dégressive s'enchaîne sans repos
       });
       body.appendChild(f);
-      // interrupteur « séries d'échauffement » : reste activé pour enchaîner plusieurs séries de chauffe
-      const wt=document.createElement("button");wt.type="button";wt.className="armtoggle";wt.setAttribute("aria-pressed",warm);
-      wt.innerHTML='<span class="sw" aria-hidden="true"></span>Séries d\'échauffement';wt.title="Hors tonnage, records et progression";
-      wt.onclick=()=>{warm?warmOn.delete(id):warmOn.add(id);renderWorkout();const b=$("woList").querySelectorAll(".ex")[wi];const s=b&&b.querySelector(".addset");s&&s.focus()};
-      body.appendChild(wt);
+      // type de la prochaine série ; il reste choisi pour enchaîner (plusieurs chauffes, plusieurs dégressives)
+      const sm=document.createElement("div");sm.className="setmode";
+      sm.innerHTML='<span class="lbl">Type</span><div class="restchips" role="group" aria-label="Type de la prochaine série"></div>';
+      [["","Travail","Série normale"],["w","Échauff.","Échauffement : compté dans le tonnage, mais pas dans les records, la progression ni le compte de séries"],["d","Dégressive","Série normale, simplement notée dégressive (pas de minuteur de repos)"]].forEach(([m,l,tip])=>{
+        const b=document.createElement("button");b.type="button";b.textContent=l;b.title=tip;b.setAttribute("aria-pressed",mode===m);
+        b.onclick=()=>{if(m)setMode.set(id,m);else setMode.delete(id);renderWorkout();const e=$("woList").querySelectorAll(".ex")[wi];const s=e&&e.querySelector(".addset");s&&s.focus()};
+        sm.lastChild.appendChild(b);
+      });
+      body.appendChild(sm);
       const arm=document.createElement("button");arm.type="button";arm.className="armtoggle";arm.setAttribute("aria-pressed",perArm(w.ex));
       arm.innerHTML='<span class="sw" aria-hidden="true"></span>Charge et reps par bras (tonnage ×2)';
       arm.onclick=()=>{const m=Object.assign({},state.settings.perArm||{});m[norm(w.ex)]=!perArm(w.ex);state.settings.perArm=m;saveSettings();renderWorkout()};

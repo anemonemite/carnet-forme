@@ -385,3 +385,9 @@ select{height:40px;border-radius:9px;border:1px solid var(--line);background:var
 .addset.warm{border-style:dashed}
 .wo-plan{align-self:flex-start}
 .armtoggle{text-align:left}
+/* série dégressive : simple étiquette (compte comme une série normale) */
+.setchip.drop{border-color:var(--boxe)}
+.setchip.drop .wtag{color:var(--boxe)}
+.addset.drop{border-color:var(--boxe);color:var(--boxe);background:var(--surface)}
+.setmode{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.setmode .restchips button{font-family:var(--body);font-size:12.5px;font-weight:600}
